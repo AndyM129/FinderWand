@@ -16,6 +16,9 @@
 set -uo pipefail
 setopt NULL_GLOB
 
+# 确保标准命令（rm 等在 /bin）可用，避免自定义环境里 PATH 缺失导致 "command not found: rm"
+export PATH="/bin:/usr/bin:/sbin:/usr/sbin:$PATH"
+
 DRY_RUN=0
 PURGE_CONFIG=0
 
@@ -50,14 +53,20 @@ APP_NAMES=("Finder Wand" "Finder Wand Dev")
 SCRIPT_DIR="${0:A:h}"
 ROOT="${SCRIPT_DIR:h}"
 
-echo "==> FinderWand 卸载/重置$([[ $DRY_RUN -eq 1 ]] && echo '（dry-run 预览）')"
+if (( DRY_RUN )); then
+  echo "🧹 FinderWand 卸载/重置（🔎 dry-run 预览，不会实际改动）"
+else
+  echo "🧹 FinderWand 卸载/重置"
+fi
 
 # 1. 退出正在运行的 App
 for name in "${APP_NAMES[@]}"; do
-  if (( ! DRY_RUN )); then
-    killall "$name" 2>/dev/null && echo "[quit] $name"
+  if (( DRY_RUN )); then
+    echo "🔎 [预览] 退出 App: $name"
+  elif killall "$name" 2>/dev/null; then
+    echo "🛑✅ 已退出 App: $name"
   else
-    echo "[quit] $name"
+    echo "⚠️  App 未在运行(跳过): $name"
   fi
 done
 
@@ -91,42 +100,59 @@ fi
 
 # 3. 执行删除
 if (( ${#targets} == 0 )); then
-  echo "[info] 未发现可删除的残留"
+  echo "ℹ️  未发现可删除的残留"
 else
   for path in "${targets[@]}"; do
-    echo "[remove] $path"
-    (( DRY_RUN )) || rm -rf -- "$path"
+    if (( DRY_RUN )); then
+      echo "🔎 [预览] 将删除: $path"
+      continue
+    fi
+
+    # 沙箱容器由 containermanagerd 管理，其 metadata 带 SIP restricted 标记，
+    # 命令行 rm 会报 "Operation not permitted"。这里静默尝试，删不掉再分类提示。
+    /bin/rm -rf -- "$path" 2>/dev/null
+    if [[ ! -e "$path" ]]; then
+      echo "🗑️✅ 已删除: $path"
+    elif [[ "$path" == "$HOME/Library/Containers/"* ]]; then
+      echo "⚠️  系统保护无法删除(可忽略，不影响重装；如需清除可在 Finder 里拖到废纸篓): $path"
+    else
+      echo "🗑️❌ 删除失败: $path"
+    fi
   done
 fi
 
 # 4. 注销扩展注册（best-effort）
 for id in $EXT_IDS; do
-  if (( ! DRY_RUN )); then
-    pluginkit -e ignore -i "$id" 2>/dev/null && echo "[pluginkit] ignore $id"
+  if (( DRY_RUN )); then
+    echo "🔎 [预览] 忽略扩展: $id"
+  elif pluginkit -e ignore -i "$id" 2>/dev/null; then
+    echo "🧩✅ 已忽略扩展: $id"
   else
-    echo "[pluginkit] ignore $id"
+    echo "⚠️  忽略扩展未生效(可忽略): $id"
   fi
 done
 
 # 5. 重建 LaunchServices 注册库
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
-if (( ! DRY_RUN )); then
-  echo "[lsregister] 重建注册库"
-  "$LSREGISTER" -kill -r -domain local -domain system -domain user >/dev/null 2>&1
+if (( DRY_RUN )); then
+  echo "🔎 [预览] 重建 LaunchServices 注册库"
 else
-  echo "[lsregister] 重建注册库（跳过）"
+  "$LSREGISTER" -kill -r -domain local -domain system -domain user >/dev/null 2>&1
+  echo "🔄✅ 已重建 LaunchServices 注册库"
 fi
 
 # 6. 重启 Finder 相关进程
-if (( ! DRY_RUN )); then
+if (( DRY_RUN )); then
+  echo "🔎 [预览] 重启 Finder / SystemUIServer"
+else
   killall Finder 2>/dev/null
   killall SystemUIServer 2>/dev/null
-  echo "[restart] Finder / SystemUIServer"
+  echo "🔁✅ 已重启 Finder / SystemUIServer"
 fi
 
-echo "==> 完成"
+echo "🎉 全部完成"
 echo ""
-echo "提示：若「系统设置 > 登录项与扩展」仍残留僵尸「Finder Wand」项，"
-echo "     多为 BackgroundTaskManagement 缓存，注销重登或重启即可清除；"
-echo "     仍不行可执行（较重，会重置所有登录项，之后合法项会重新登记）："
+echo "💡 若「系统设置 > 登录项与扩展」仍残留僵尸「Finder Wand」项："
+echo "   ⚠️  多为 BackgroundTaskManagement 缓存，注销重登或重启即可清除；"
+echo "   ⚠️  仍不行可执行（较重，会重置所有登录项，之后合法项会重新登记）："
 echo "         sfltool resetbtm   # 执行后建议重启"
