@@ -136,6 +136,17 @@
   - `Sources/SpikeMonitor.swift`：主 App 监听该 Darwin 通知，收到后向 `~/.config/FinderWand/spike.log` 追加时间戳，验证「沙箱扩展 → 非沙箱主 App」链路。
   - 构建校验：Debug `BUILD SUCCEEDED`，appex 正确嵌入；Info.plist 含 `NSExtensionPointIdentifier=com.apple.FinderSync`、`NSExtensionPrincipalClass=FinderWandSync.FinderSync`；BundleID `io.github.andym129.dev.finder-wand.FinderSync`；ad-hoc 签名且含 `app-sandbox` 权限。
   - 待用户手动验证：启动 App 注册扩展 → 系统设置开启扩展 → 任意路径右键应出现菜单项 → 点击后 `spike.log` 应追加记录。
+  - spike 结论（2026-07-18，已验证）：菜单项在任意路径右键出现，点击后 `spike.log` 正常追加。证明 ad-hoc 扩展可加载、菜单可全局出现、「沙箱扩展 → 非沙箱主 App」链路成立。可进入 M3 正式实现。
+- slice 1 已实现（2026-07-18，每个 `.sh` = 一级菜单项，点击经主 App 执行）：
+  - IPC 方案：扩展容器文件 + Darwin 信号（不使用 App Group）。`Shared/FWIPC.swift` 为两 target 共享常量（Darwin 名、插件目录、IPC 目录推导）。
+  - 扩展 `FinderSync.swift`：枚举插件目录 `.sh`（需 `temporary-exception` 读权限），每个作为一级菜单项；点击时收集当前目录与选中项，写请求 JSON 到扩展容器 IPC 目录并发 Darwin 通知。
+  - 主 App `PluginActionService.swift`：监听 Darwin 通知，读取扩展容器内的请求，执行脚本（尊重 shebang，传入 argv 与 `FW_CURRENT_DIR`/`FW_SELECTED_PATHS`），结果写 `~/.config/FinderWand/run.log`。
+  - 已用示例插件 `~/.config/FinderWand/hello.sh` 便于验证。
+  - 构建校验：Debug `BUILD SUCCEEDED`，扩展权限含 `.config/FinderWand/` 读例外。待用户运行验证右键出现「hello」项、点击后 `run.log` 记录脚本输出。
+  - 修正（2026-07-18）：沙箱扩展直接读插件目录不可行（`home` 解析为容器、`temporary-exception` 实测未生效，右键显示「无插件」）。改为「清单中转」方案：主 App 枚举 `.sh` 并把清单写入扩展容器内（`.../Data/Library/Application Support/FinderWandIPC/manifest.json`），扩展只读自己容器内的清单构建菜单，无需任何插件目录读权限。主 App 在启动、收到扩展 refresh 通知、以及插件目录变更（`DispatchSource` 监听）时刷新清单。已移除扩展的 `temporary-exception` 权限。`Sources/DarwinObserverRegistry.swift` 按通知名分发 Darwin 通知。
+  - 修正（2026-07-18）：点击菜单项无反应，定位为 `NSMenuItem.representedObject` 无法跨 Finder Sync 的 XPC 存活；改用菜单项 `title` 回查清单取脚本路径（title 可靠存活）。
+  - slice 1 已验证通过（2026-07-18）：右键任意路径出现 `hello`，点击后 `run.log` 记录脚本执行结果（`exit=0`、`currentDir`、`selected`、stdout 均正确）。整条链路成立：扩展菜单 → title 回查清单 → 写请求到容器 → Darwin → 主 App 执行脚本 → 写日志。诊断代码已移除。
+- slice 2（待做）：xbar 风格动态多级菜单与条件显示（脚本输出决定菜单结构），需在 `menu(for:)` 同步经 IPC 取脚本输出并设超时。
 
 ## 2.5、M4：插件协议完善（状态：未开始）
 

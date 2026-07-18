@@ -17,6 +17,7 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      - path: Shared
     # 按配置分别引入 xcconfig，区分 Dev 版与正式版
     configFiles:
       Debug: Configs/Dev.xcconfig
@@ -32,6 +33,7 @@ targets:
     platform: macOS
     sources:
       - path: FinderSyncExtension
+      - path: Shared
     info:
       path: FinderSyncExtension/Info.plist
       properties:
