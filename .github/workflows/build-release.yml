@@ -1,0 +1,84 @@
+name: Build and Release
+
+# 触发方式：
+#   1. 推送 tag（如 v0.1.0）    -> 构建并发布正式版 Release
+#   2. 手动触发 workflow_dispatch -> 构建并发布测试版（beta）预发布
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "测试版版本号（可选，留空则用 xcconfig 默认值）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # 计算渠道、版本号与 Release tag
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          SHA="$(git rev-parse --short HEAD)"
+          TS="$(date +%Y%m%d%H%M%S)"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            CHANNEL="stable"
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            PRERELEASE="false"
+          else
+            CHANNEL="beta"
+            VERSION="${{ github.event.inputs.version }}"
+            # 版本号为空时从 xcconfig 读取默认值
+            if [ -z "$VERSION" ]; then
+              VERSION="$(grep 'MARKETING_VERSION' Configs/Base.xcconfig | head -1 | sed 's/.*= *//' | tr -d ' ')"
+            fi
+            TAG="v${VERSION}-beta-${SHA}-${TS}"
+            PRERELEASE="true"
+          fi
+          {
+            echo "channel=$CHANNEL"
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Package DMG
+        env:
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          MARKETING_VERSION: ${{ steps.meta.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          LABEL: ${{ steps.meta.outputs.tag }}
+        run: ./scripts/package-dmg.sh
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            .build/dist/FinderWand-${{ steps.meta.outputs.tag }}.dmg
+            .build/dist/FinderWand-${{ steps.meta.outputs.tag }}.dmg.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
