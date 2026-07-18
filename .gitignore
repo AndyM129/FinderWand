@@ -60,3 +60,16 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# FinderWand 项目特定
+
+## XcodeGen 生成的工程文件（由 project.yml 生成，不纳入版本管理）
+*.xcodeproj/
+
+## 构建缓存与产物（固定在项目根目录下，独立维护）
+DerivedData/
+build/
+*.dmg
+
+## macOS
+.DS_Store

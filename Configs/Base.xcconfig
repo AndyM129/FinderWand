@@ -1,0 +1,27 @@
+// 公共构建配置：Dev 版与正式版共享
+// 通过 #include 被 Dev.xcconfig / Release.xcconfig 引入
+
+// 部署目标：最低支持 macOS 14.0
+MACOSX_DEPLOYMENT_TARGET = 14.0
+SDKROOT = macosx
+
+// Swift 版本
+SWIFT_VERSION = 5.0
+
+// 菜单栏常驻应用：不在 Dock 显示图标，无主窗口
+INFOPLIST_KEY_LSUIElement = YES
+
+// 自动生成 Info.plist
+GENERATE_INFOPLIST_FILE = YES
+
+// 版本号（后续由 CI 注入覆盖）
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// 无付费开发者账号：本地 ad-hoc 签名，不强制签名
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+CODE_SIGNING_REQUIRED = NO
+
+// 分发方式为直接提供 .dmg，不启用沙盒（避免文件夹权限弹窗）
+ENABLE_APP_SANDBOX = NO

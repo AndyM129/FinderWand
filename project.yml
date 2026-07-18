@@ -1,0 +1,33 @@
+name: FinderWand
+options:
+  bundleIdPrefix: io.github.andym129
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+# 构建配置：Debug 对应开发版，Release 对应正式版
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  FinderWand:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    # 按配置分别引入 xcconfig，区分 Dev 版与正式版
+    configFiles:
+      Debug: Configs/Dev.xcconfig
+      Release: Configs/Release.xcconfig
+
+schemes:
+  FinderWand:
+    build:
+      targets:
+        FinderWand: all
+    run:
+      config: Debug
+    archive:
+      config: Release

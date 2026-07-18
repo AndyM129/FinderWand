@@ -11,6 +11,7 @@
 - 分发方式：无付费 Apple 开发者账号，仅通过 GitHub Releases 提供 `.dmg` 安装包，不做公证（notarization）。
 - 权限约束：使用过程中涉及文件夹权限时，不得出现授权弹窗或提示。
 - 参考项目：EdgeMark（打包与 GitHub Actions 配置参考），xbar（插件脚本协议参考）。
+- 代码仓库：github.com/andym129/FinderWand（用于 Releases 发布、检查更新、关于页跳转）。
 
 ## 1.2、里程碑划分
 
@@ -20,24 +21,39 @@
 
 # 2、里程碑拆解
 
-## 2.1、M0：工程初始化（状态：未开始）
+## 2.1、M0：工程初始化（状态：已完成）
 
 目标：搭建可编译运行的最小 AppKit 工程骨架。
+
+技术决策：
+
+- 工程生成：采用 XcodeGen（`project.yml` 声明式生成 `.xcodeproj`），工程文件不纳入版本管理，避免 `pbxproj` 冲突。
+- 版本区分：单 target，通过 Build Configuration（`Debug` / `Release`）加 `xcconfig` 区分 Dev 版与正式版的 BundleID、App Name。不使用两个独立 target。
+- 构建缓存：通过构建脚本与 CI 统一传入 `-derivedDataPath ./.build/DerivedData`，将 DerivedData 固定到项目根目录下，独立维护。
+- 签名：无付费账号，本地 ad-hoc 签名（`CODE_SIGN_IDENTITY = -`），不强制签名。
+- Xcode：本机装有 Xcode 26.x，命令行通过 `DEVELOPER_DIR` 指向 Xcode.app 调用 `xcodebuild`（当前 `xcode-select` 指向 CommandLineTools，不改全局配置）。
 
 任务：
 
 - 创建 Xcode 工程（App 类型，AppKit 生命周期，非 Storyboard 可选）。
 - 配置应用为菜单栏常驻应用（`LSUISafeElement` / `LSUIElement`，不显示 Dock 图标）。
-- 配置编译、构建缓存路径到项目根目录下的特定文件夹（如 `./.build` / `./DerivedData`），独立维护，避免受其他项目影响或被清理删除。
-- 配置两套 target 与 BundleID：
-  - 开发版：target `Debug`，BundleID `io.github.andym129.dev.finder-wand`，APP Name `Finder Wand Dev`。
-  - 正式版：target `Release`，BundleID `io.github.andym129.finder-wand`，APP Name `Finder Wand`。
+- 配置编译、构建缓存路径到项目根目录下的特定文件夹（`./.build/DerivedData`），独立维护，避免受其他项目影响或被清理删除。
+- 通过 Build Configuration 加 `xcconfig` 区分两套配置：
+  - 开发版（Debug）：BundleID `io.github.andym129.dev.finder-wand`，App Name `Finder Wand Dev`。
+  - 正式版（Release）：BundleID `io.github.andym129.finder-wand`，App Name `Finder Wand`。
 - 建立基础目录结构与代码分层（App 入口、菜单栏控制器、插件加载、动作执行）。
 - 将 Deployment Target 设为 macOS 14.0 并写入工程配置。
 
 进展记录：
 
-- 待补充。
+- 已完成。工程结构：`project.yml`（XcodeGen）、`Configs/{Base,Dev,Release}.xcconfig`、`Sources/{main.swift,AppDelegate.swift}`、`scripts/build.sh`。
+- `main.swift` 为应用入口，`AppDelegate` 创建菜单栏 `NSStatusItem`，M0 菜单仅含「退出 Finder Wand」，占位图标用系统符号 `wand.and.stars`。
+- 已验证 Debug 与 Release 两套配置均 `BUILD SUCCEEDED`：
+  - Debug（开发版）：`Finder Wand Dev.app`，BundleID `io.github.andym129.dev.finder-wand`。
+  - Release（正式版）：`Finder Wand.app`，BundleID `io.github.andym129.finder-wand`。
+  - 两者 `LSUIElement = true`（菜单栏常驻，无 Dock 图标），`LSMinimumSystemVersion = 14.0`。
+- DerivedData 已固定到 `./.build/DerivedData`；`.xcodeproj` 由 XcodeGen 生成，不纳入版本管理。
+- 构建命令：`./scripts/build.sh [Debug|Release]`（脚本自动探测 Xcode.app 并设置 `DEVELOPER_DIR`）。
 
 ## 2.2、M1：打包与发布流水线（状态：未开始）
 
@@ -48,7 +64,8 @@
 - 参考 EdgeMark 的 `.github/workflows` 配置搭建 CI。
 - 构建产物打包为 `.dmg`。
 - 版本号与测试版标识（beta、commit 短哈希、时间戳）注入构建流程。
-- 推送 tag 或触发条件时自动创建 GitHub Release 并上传 `.dmg`。
+- 触发策略：推送 tag（如 `v0.1.0`）时构建并发布正式版 Release，`workflow_dispatch` 手动触发构建测试版。
+- 自动创建 GitHub Release 并上传 `.dmg`。
 
 进展记录：
 
@@ -119,6 +136,5 @@
 
 # 3、待澄清与待决策清单
 
-- Finder 右键菜单的技术实现方案（关系到 M2 全部任务）。
+- Finder 右键菜单的技术实现方案（关系到 M3 全部任务）。
 - 自动更新组件选型（Sparkle 兼容性）。
-- GitHub 仓库地址（用于检查更新与关于页跳转）。

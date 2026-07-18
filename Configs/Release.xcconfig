@@ -1,0 +1,9 @@
+// 正式版（Release）配置
+#include "Base.xcconfig"
+
+// 正式版 BundleID
+PRODUCT_BUNDLE_IDENTIFIER = io.github.andym129.finder-wand
+
+// 正式版 App 名称
+PRODUCT_NAME = Finder Wand
+INFOPLIST_KEY_CFBundleDisplayName = Finder Wand
