@@ -102,7 +102,7 @@
 - 「关于」打开仓库主页 `https://github.com/AndyM129/FinderWand`（PRD 已同步修正为「仓库主页」）。
 - Debug 配置 `BUILD SUCCEEDED`。
 
-## 2.4、M3：Finder 右键菜单核心能力（状态：spike 验证中）
+## 2.4、M3：Finder 右键菜单核心能力（状态：已完成）
 
 目标：在任意路径下呼出 Finder 右键菜单时，动态生成菜单项并执行动作。
 
@@ -154,6 +154,7 @@
   - 示例插件 `~/.config/FinderWand/hello.sh` 已改写为多级 + 条件显示示例。
   - 构建校验：Debug `BUILD SUCCEEDED`。待用户运行验证：右键出现「Finder Wand 示例」及其子菜单，选中文件时出现「对所选执行」，点击子项执行成功（`run.log` 记录、终端/浏览器/默认程序被正确调起）。
   - 风险待观察：`NSMenuItem.tag` 是否跨 Finder Sync XPC 稳定存活（representedObject 已证实不存活）；若 tag 也丢失需改用其他标识。
+  - slice 2 已验证通过（2026-07-18）：多级子菜单正常显示，点击子项能执行。确认 `NSMenuItem.tag` 可跨 Finder Sync XPC 存活。M3 核心能力（任意路径动态多级菜单 + 条件显示 + 脚本执行）完成。
 - slice 2（待做）：xbar 风格动态多级菜单与条件显示（脚本输出决定菜单结构），需在 `menu(for:)` 同步经 IPC 取脚本输出并设超时。
 
 ## 2.5、M4：插件协议完善（状态：未开始）
