@@ -155,6 +155,16 @@
   - 构建校验：Debug `BUILD SUCCEEDED`。待用户运行验证：右键出现「Finder Wand 示例」及其子菜单，选中文件时出现「对所选执行」，点击子项执行成功（`run.log` 记录、终端/浏览器/默认程序被正确调起）。
   - 风险待观察：`NSMenuItem.tag` 是否跨 Finder Sync XPC 稳定存活（representedObject 已证实不存活）；若 tag 也丢失需改用其他标识。
   - slice 2 已验证通过（2026-07-18）：多级子菜单正常显示，点击子项能执行。确认 `NSMenuItem.tag` 可跨 Finder Sync XPC 存活。M3 核心能力（任意路径动态多级菜单 + 条件显示 + 脚本执行）完成。
+  - 已知问题（2026-07-18，v0.1.1 正式版安装后暴露，待 fix）：
+    - 现象：正式版右键仅显示置灰「Finder Wand」，且延迟一两秒。
+    - 根因：Finder 实际启用的是开发版扩展（`登录项与扩展`显示为「Finder Wand Dev」，是开发期反复运行 dev 构建注册遗留），但用户运行的是正式版 App。dev 扩展把 build 请求写进 dev 容器并等 dev App 响应，而 dev App 未运行 → 2.5s 超时 → 空菜单占位。延迟与空菜单同源。
+    - 成因：dev/release 用不同 BundleID（`…dev.finder-wand` vs `…finder-wand`），两套 App + 两套扩展可共存，开发期启用了 dev 那套。
+    - 待做修复方向：1) 扩展的 CFBundleDisplayName 按 config 区分（「Finder Wand Dev」/「Finder Wand」），避免混淆；2) 文档说明正式使用只应安装/启用一套；3) 主 App 未运行时的占位文案改为引导（如「请先启动 Finder Wand」）；4) 结合 M4 开机自启保证主 App 常驻；5) 评估降低 `menu(for:)` 同步等待时延。
+  - 已修复的打包缺陷（2026-07-18，v0.1.1 正式版「右键完全无菜单项」根因）：
+    - 根因：`scripts/package-dmg.sh` 注入 Info.plist 后用 `codesign --force --deep --sign -` 重签，`--deep` 连带重签内嵌 Finder Sync 扩展并丢失其 entitlements（含 `com.apple.security.app-sandbox`）。Finder Sync 扩展必须沙箱，无沙箱权限被系统拒绝加载 → 右键无任何菜单。dev 用 `build.sh`（不重签）故正常。
+    - 已本地复现确认：`--deep` 重签后 appex entitlements 变空。
+    - 修复：只重签外层 App（`codesign --force --sign -`，不加 `--deep`）；因仅改动了 App 顶层 Info.plist，内嵌扩展不动、签名保留。已验证重签后 appex 保留 sandbox 权限，且 app/appex 签名均校验通过。
+    - 影响：已发布的 v0.1.1 受此缺陷影响，需重新出包（下个 tag 的 CI 构建即为修复版）。
 
 ## 2.5、M4：自动更新与开机自启（状态：未开始）
 

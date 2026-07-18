@@ -16,7 +16,7 @@
 
 ## 1.3、修复
 
-- 暂无。
+- 打包脚本 `package-dmg.sh` 之前用 `codesign --deep` 重签，导致内嵌 Finder Sync 扩展的 entitlements（含 app-sandbox）被清空，扩展无法加载、右键无菜单。改为只重签外层 App，不再使用 `--deep`。
 
 # 2、历史版本
 

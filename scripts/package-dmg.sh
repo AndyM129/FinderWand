@@ -77,8 +77,11 @@ plutil -replace FWBuildChannel -string "$CHANNEL" "$PLIST"
 plutil -replace FWGitCommit -string "$GIT_SHA" "$PLIST"
 plutil -replace FWBuildTimestamp -string "$TIMESTAMP" "$PLIST"
 
-# 修改 Info.plist 后重新 ad-hoc 签名
-codesign --force --deep --sign - --timestamp=none "$APP"
+# 修改的是 App 顶层 Info.plist，内嵌扩展（appex）未改动。
+# 只重签外层 App，禁止使用 --deep：
+#   --deep 会连带重签内嵌 Finder Sync 扩展，且丢失其 entitlements（含 app-sandbox），
+#   导致扩展缺少沙箱权限而被系统拒绝加载（右键无任何菜单）。
+codesign --force --sign - --timestamp=none "$APP"
 
 SHORT_VER="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")"
 if [[ -n "${LABEL:-}" ]]; then
