@@ -94,10 +94,22 @@ class FinderSync: FIFinderSync {
     // MARK: - 构建菜单
 
     /// 递归把菜单项数组添加到菜单
-    private func appendItems(_ items: [[String: Any]], to menu: NSMenu) {
+    /// - Parameter isSubmenu: 是否为子菜单。顶层菜单项会被 Finder 合并进右键菜单，
+    ///   其中原生分隔线会被渲染成空行；子菜单是我们自有的 NSMenu，原生分隔线可正常显示。
+    private func appendItems(_ items: [[String: Any]], to menu: NSMenu, isSubmenu: Bool = false) {
         for item in items {
             if item["separator"] as? Bool == true {
-                menu.addItem(.separator())
+                if isSubmenu {
+                    // 子菜单内使用系统原生分隔线
+                    menu.addItem(.separator())
+                } else {
+                    // 顶层：Finder 会把原生分隔线渲染成空行，用一条灰色横线模拟
+                    let separator = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+                    separator.attributedTitle = NSAttributedString(
+                        string: "──────────",
+                        attributes: [.foregroundColor: NSColor.tertiaryLabelColor])
+                    menu.addItem(separator)
+                }
                 continue
             }
 
@@ -106,19 +118,15 @@ class FinderSync: FIFinderSync {
 
             if let children = item["children"] as? [[String: Any]], !children.isEmpty {
                 let submenu = NSMenu(title: title)
-                appendItems(children, to: submenu)
+                appendItems(children, to: submenu, isSubmenu: true)
                 menuItem.submenu = submenu
             } else if let actionId = item["actionId"] as? Int {
                 menuItem.action = #selector(runAction(_:))
                 menuItem.target = self
                 menuItem.tag = actionId
-            } else {
-                menuItem.isEnabled = false
             }
-
-            if item["enabled"] as? Bool == false {
-                menuItem.isEnabled = false
-            }
+            // 说明：无 action 的项作为「标签」。不主动置为 disabled，
+            // 因为 Finder Sync 会忽略 disabled，且置灰会盖掉自定义颜色/字体。
 
             applyStyle(item, to: menuItem, title: title)
             menu.addItem(menuItem)
@@ -128,7 +136,10 @@ class FinderSync: FIFinderSync {
     /// 应用图标与文本样式（sfimage / color / font / size）
     private func applyStyle(_ item: [String: Any], to menuItem: NSMenuItem, title: String) {
         if let symbol = item["sfimage"] as? String {
-            menuItem.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+            // 作为模板图，跟随系统外观（暗色显示为白色，浅色为黑色）
+            image?.isTemplate = true
+            menuItem.image = image
         }
 
         var attributes: [NSAttributedString.Key: Any] = [:]
