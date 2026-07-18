@@ -2,8 +2,8 @@ import Foundation
 
 /// 菜单项动作
 enum PluginAction {
-    /// 执行命令：可执行文件路径 + 参数
-    case bash(path: String, args: [String])
+    /// 执行命令：可执行文件路径 + 参数 + 是否在终端中运行
+    case bash(path: String, args: [String], terminal: Bool)
     /// 打开链接
     case href(String)
 }
@@ -15,6 +15,15 @@ final class MenuNode {
     var enabled: Bool
     var action: PluginAction?
     var children: [MenuNode] = []
+
+    /// SF Symbol 图标名（sfimage=）
+    var sfimage: String?
+    /// 文本颜色（color=，支持颜色名或 #RRGGBB）
+    var color: String?
+    /// 字体名（font=）
+    var fontName: String?
+    /// 字号（size=）
+    var fontSize: Double?
 
     init(title: String, isSeparator: Bool = false, enabled: Bool = true, action: PluginAction? = nil) {
         self.title = title
@@ -31,9 +40,12 @@ final class MenuNode {
 ///   - 层级用前导 `--` 对表示：无前缀为一级，`--` 为二级，`----` 为三级，依此类推。
 ///   - 纯 `-` 且长度 ≥3 的行是分隔线；`---` 为一级分隔线，`-----` 为二级，依此类推。
 ///   - 标题与参数用 ` | ` 分隔，参数为 `key=value`（value 可用双引号包裹）：
-///       - `bash=<可执行路径>`（或 `shell=`）与 `param0=..,param1=..` 表示点击执行的命令与参数。
+///       - `bash=<可执行路径>`（或 `shell=`）与 `param0..paramN=<arg>` 表示点击执行的命令与参数。
+///       - `terminal=true` 表示在终端中运行（可见输出），默认后台静默执行。
 ///       - `href=<url>` 表示点击打开链接。
 ///       - `disabled=true` 表示不可点击。
+///       - `sfimage=<SF Symbol 名>` 为菜单项加图标。
+///       - `color=<颜色名或 #RRGGBB>`、`font=<字体名>`、`size=<字号>` 控制文本样式。
 ///   - 脚本输出为空即不贡献任何菜单项（实现条件显示/隐藏）。
 enum PluginOutputParser {
 
@@ -81,10 +93,17 @@ enum PluginOutputParser {
             node.enabled = false
         }
 
+        node.sfimage = params["sfimage"]
+        node.color = params["color"]
+        node.fontName = params["font"]
+        node.fontSize = params["size"].flatMap { Double($0) }
+
         if let href = params["href"] {
             node.action = .href(href)
         } else if let bash = params["bash"] ?? params["shell"] {
-            node.action = .bash(path: bash, args: collectPositionalParams(params))
+            node.action = .bash(path: bash,
+                                args: collectPositionalParams(params),
+                                terminal: params["terminal"] == "true")
         }
 
         return node

@@ -186,7 +186,7 @@
 - 构建校验：Debug `BUILD SUCCEEDED`。待运行验证：菜单出现两项且行为正确；首次运行后「开机自动运行」默认勾选；检查更新在有/无新版/失败时提示正确。
 - 注意：`SMAppService` 从非 `/Applications` 路径（如 DerivedData 的 dev 构建）注册可能受限，正式验证以安装后的 Release 包为准。
 
-## 2.6、M5：插件协议完善（状态：未开始）
+## 2.6、M5：插件协议完善（状态：待运行确认）
 
 目标：在 M3 已实现的 xbar 精简子集基础上，增强 `.sh` 插件协议。
 
@@ -198,7 +198,15 @@
 
 进展记录：
 
-- 待补充。
+- 已实现的增强（本轮，用户选择的子集：terminal / sfimage / 颜色字体 / 错误可视化）：
+  - `terminal=true`：点击时在 Terminal 中运行命令（主 App 写临时 `.command` 包装脚本并 `open -a Terminal`），默认仍后台静默执行。
+  - `sfimage=<SF Symbol>`：为菜单项设置图标（扩展侧 `NSImage(systemSymbolName:)`）。
+  - `color=<名或#RRGGBB>` / `font=<字体>` / `size=<字号>`：通过 `attributedTitle` 应用文本样式。
+  - 错误可视化：构建期某个脚本退出码非 0（含超时）时，注入一个不可点击的「⚠️ <脚本>（执行失败，退出码 N）」提示项；动作执行结果继续写 `run.log`。
+  - 涉及文件：`PluginOutputParser.swift`（新增字段与参数解析）、`PluginService.swift`（序列化新字段、terminal 执行、构建期错误节点）、`FinderSync.swift`（图标与样式渲染）。
+  - 构建校验：Debug `BUILD SUCCEEDED`。待运行验证：图标/颜色显示、`terminal=true` 打开终端执行、脚本报错时出现警告项。
+  - 未做：`refresh=true`（对右键菜单意义较小，用户未选）。
+- 备注：示例插件 `~/.config/FinderWand/hello.sh` 由用户自行维护，未覆盖其内容。
 
 # 3、待澄清与待决策清单
 

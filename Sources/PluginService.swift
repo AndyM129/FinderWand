@@ -99,6 +99,14 @@ final class PluginService {
                              currentDir: currentDir,
                              selected: selected)
             all += PluginOutputParser.parse(result.output)
+
+            // 构建期脚本失败/超时：注入一个不可点击的错误提示项
+            if result.status != 0 {
+                let errorNode = MenuNode(
+                    title: "⚠️ \(script.lastPathComponent)（执行失败，退出码 \(result.status)）",
+                    enabled: false)
+                all.append(errorNode)
+            }
         }
 
         return all
@@ -110,6 +118,11 @@ final class PluginService {
             if node.isSeparator { return ["separator": true] }
 
             var dict: [String: Any] = ["title": node.title, "enabled": node.enabled]
+
+            if let sfimage = node.sfimage { dict["sfimage"] = sfimage }
+            if let color = node.color { dict["color"] = color }
+            if let fontName = node.fontName { dict["font"] = fontName }
+            if let fontSize = node.fontSize { dict["size"] = fontSize }
 
             if !node.children.isEmpty {
                 dict["children"] = serialize(node.children, currentDir: currentDir, selected: selected)
@@ -171,15 +184,53 @@ final class PluginService {
             }
             appendRunLog(summary: "href=\(urlString)", status: 0, output: "")
 
-        case .bash(let path, let args):
-            let result = run(executable: path,
-                             args: args,
-                             currentDir: stored.currentDir,
-                             selected: stored.selected)
-            appendRunLog(summary: "bash=\(path) args=\(args.joined(separator: " "))",
-                         status: result.status,
-                         output: result.output)
+        case .bash(let path, let args, let terminal):
+            if terminal {
+                runInTerminal(path: path, args: args, currentDir: stored.currentDir, selected: stored.selected)
+                appendRunLog(summary: "terminal bash=\(path) args=\(args.joined(separator: " "))",
+                             status: 0,
+                             output: "已在终端中打开")
+            } else {
+                let result = run(executable: path,
+                                 args: args,
+                                 currentDir: stored.currentDir,
+                                 selected: stored.selected)
+                appendRunLog(summary: "bash=\(path) args=\(args.joined(separator: " "))",
+                             status: result.status,
+                             output: result.output)
+            }
         }
+    }
+
+    /// 在 Terminal 中运行命令：写一个临时 .command 包装脚本并用 open 打开
+    private func runInTerminal(path: String, args: [String], currentDir: String, selected: [String]) {
+        let wrapper = FileManager.default.temporaryDirectory
+            .appendingPathComponent("finderwand-\(UUID().uuidString).command")
+
+        var lines = ["#!/bin/bash"]
+        lines.append("export FW_CURRENT_DIR=\(shellQuote(currentDir))")
+        lines.append("export FW_SELECTED_PATHS=\(shellQuote(selected.joined(separator: "\n")))")
+        if !currentDir.isEmpty {
+            lines.append("cd \(shellQuote(currentDir))")
+        }
+        lines.append(([path] + args).map(shellQuote).joined(separator: " "))
+
+        do {
+            try (lines.joined(separator: "\n") + "\n").write(to: wrapper, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
+
+            let open = Process()
+            open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            open.arguments = ["-a", "Terminal", wrapper.path]
+            try open.run()
+        } catch {
+            NSLog("在终端运行失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// shell 单引号安全转义
+    private func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     // MARK: - 执行脚本

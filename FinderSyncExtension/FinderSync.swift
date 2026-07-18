@@ -120,8 +120,60 @@ class FinderSync: FIFinderSync {
                 menuItem.isEnabled = false
             }
 
+            applyStyle(item, to: menuItem, title: title)
             menu.addItem(menuItem)
         }
+    }
+
+    /// 应用图标与文本样式（sfimage / color / font / size）
+    private func applyStyle(_ item: [String: Any], to menuItem: NSMenuItem, title: String) {
+        if let symbol = item["sfimage"] as? String {
+            menuItem.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        }
+
+        var attributes: [NSAttributedString.Key: Any] = [:]
+        if let colorString = item["color"] as? String, let color = Self.color(from: colorString) {
+            attributes[.foregroundColor] = color
+        }
+
+        let size = (item["size"] as? Double).map { CGFloat($0) } ?? NSFont.systemFontSize
+        if let fontName = item["font"] as? String, let font = NSFont(name: fontName, size: size) {
+            attributes[.font] = font
+        } else if item["size"] != nil {
+            attributes[.font] = NSFont.systemFont(ofSize: size)
+        }
+
+        if !attributes.isEmpty {
+            menuItem.attributedTitle = NSAttributedString(string: title, attributes: attributes)
+        }
+    }
+
+    /// 解析颜色：支持常见颜色名与 #RRGGBB
+    private static func color(from string: String) -> NSColor? {
+        let value = string.trimmingCharacters(in: .whitespaces).lowercased()
+        switch value {
+        case "red": return .systemRed
+        case "green": return .systemGreen
+        case "blue": return .systemBlue
+        case "orange": return .systemOrange
+        case "yellow": return .systemYellow
+        case "purple": return .systemPurple
+        case "gray", "grey": return .systemGray
+        case "black": return .black
+        case "white": return .white
+        default:
+            break
+        }
+
+        guard value.hasPrefix("#"), value.count == 7 else { return nil }
+
+        let hex = String(value.dropFirst())
+        guard let intValue = Int(hex, radix: 16) else { return nil }
+
+        let r = CGFloat((intValue >> 16) & 0xFF) / 255
+        let g = CGFloat((intValue >> 8) & 0xFF) / 255
+        let b = CGFloat(intValue & 0xFF) / 255
+        return NSColor(red: r, green: g, blue: b, alpha: 1)
     }
 
     // MARK: - 执行动作
