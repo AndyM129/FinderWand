@@ -166,7 +166,7 @@
     - 修复：只重签外层 App（`codesign --force --sign -`，不加 `--deep`）；因仅改动了 App 顶层 Info.plist，内嵌扩展不动、签名保留。已验证重签后 appex 保留 sandbox 权限，且 app/appex 签名均校验通过。
     - 影响：已发布的 v0.1.1 受此缺陷影响，需重新出包（下个 tag 的 CI 构建即为修复版）。
 
-## 2.5、M4：自动更新与开机自启（状态：待运行确认）
+## 2.5、M4：自动更新与开机自启（状态：已完成）
 
 目标：实现版本检查更新与开机自动运行。
 
@@ -185,8 +185,9 @@
 - `AppDelegate` 在启动时调用首次运行默认开启开机自启。
 - 构建校验：Debug `BUILD SUCCEEDED`。待运行验证：菜单出现两项且行为正确；首次运行后「开机自动运行」默认勾选；检查更新在有/无新版/失败时提示正确。
 - 注意：`SMAppService` 从非 `/Applications` 路径（如 DerivedData 的 dev 构建）注册可能受限，正式验证以安装后的 Release 包为准。
+- 已验证（v0.1.4 起）：安装后启动即提示「登录项已添加」，开机自启默认开启；右键菜单正常。检查更新在仓库为公开时可用（当前仓库为私有，未鉴权 API 返回 404，已在 UpdateChecker 中给出「未找到正式版发布，若仓库为私有请设为公开」的友好提示）。
 
-## 2.6、M5：插件协议完善（状态：待运行确认）
+## 2.6、M5：插件协议完善（状态：已完成）
 
 目标：在 M3 已实现的 xbar 精简子集基础上，增强 `.sh` 插件协议。
 
@@ -211,8 +212,54 @@
     - 分隔线：原生不支持（顶层与子菜单皆然），统一以一条禁用的灰色横线 `──────────` 模拟。
     - 图标：`image` 受支持，但模板图在 Finder Sync 下不会随深浅色自动适配，改为在扩展内按当前系统外观（`AppleInterfaceStyle`）用 `SymbolConfiguration(paletteColors:)` 着色（暗色白、浅色黑）。
     - 示例插件 `example.sh` 已按上述能力更新（移除颜色/字体演示）。
+  - 图标与外观修正（2026-07-18，随 App 图标一并处理）：
+    - 右键菜单 `sfimage` 图标：Finder Sync 下模板图不自动适配深浅色，改为按 `AppleInterfaceStyle` 用 `SymbolConfiguration(paletteColors:)` 着色；禁用项图标同步降透明度，与置灰标题一致。
+    - 分隔线字符由 `──────────` 调整为 `----------`。
+  - App 图标 / 菜单栏图标接入（2026-07-18）：
+    - 新增 `Sources/Assets.xcassets`（`AppIcon.appiconset` + `MenuBarIconTemplate.imageset`），`Base.xcconfig` 设 `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`，`MenuBarController` 用 `NSImage(named: "MenuBarIconTemplate")`（模板图）。
+    - 关键坑：Asset Catalog 曾因缺少根 `Contents.json` 且各 `Contents.json` 内含字面量 `\n`（非法 JSON）而完全不被 actool 编译（App 图标、菜单栏图标都不生效）。已补根 `Contents.json` 并修正为合法 JSON；`gen-appicon.sh` / `gen-menubar-icon.sh` 生成逻辑也已修复（逐行真实换行输出、去掉非标准/冲突条目、不再改 project.yml）。
+  - v0.1.8 已整体验证通过：App 图标、菜单栏品牌图标、右键动态菜单（图标着色/禁用置灰/分隔线/终端执行/条件显示）均正常，未发现明显 bug。
 - 备注：示例插件 `~/.config/FinderWand/hello.sh` 由用户自行维护，未覆盖其内容。
 
 # 3、待澄清与待决策清单
 
 - 暂无（Finder 右键菜单方案、自动更新组件选型均已确定）。
+
+# 4、脚本说明
+
+所有脚本在 `scripts/` 下，均以 zsh 编写，从项目根目录执行。
+
+## 4.1、build.sh
+
+- 用途：生成 `.xcodeproj`（XcodeGen）并本地编译。
+- 用法：`./scripts/build.sh [Debug|Release]`（默认 Debug）。
+- 说明：自动探测 Xcode.app 设置 `DEVELOPER_DIR`（本机 `xcode-select` 指向 CommandLineTools）；DerivedData 固定到 `./.build/DerivedData`。
+
+## 4.2、package-dmg.sh
+
+- 用途：编译 Release 通用二进制并打包 `.dmg`（本地/CI 通用）。
+- 用法：`CHANNEL=stable MARKETING_VERSION=0.1.8 BUILD_NUMBER=N LABEL=v0.1.8 ./scripts/package-dmg.sh`；`CHANNEL=beta` 出测试版。
+- 说明：注入渠道/commit/时间戳到 Info.plist；从内到外 ad-hoc 重签（先带 entitlements 签扩展，再签 App，禁用 `--deep`）；`hdiutil` 产出 `.dmg` 与 `.sha256`。本机因 TCC 限制 `hdiutil` 可能失败，实际出包以 CI 为准。
+
+## 4.3、uninstall.sh
+
+- 用途：清理开发调试期残留（App、构建产物、沙箱容器、偏好、缓存等），保证全新安装不受影响。
+- 用法：`./scripts/uninstall.sh [--dry-run] [--purge-config]`。默认保留插件目录 `~/.config/FinderWand`，加 `--purge-config` 才一并删除。
+- 说明：日志用 emoji 标识（🗑️✅ 删除成功、🗑️❌ 失败、⚠️ 警告/系统保护跳过）；会重建 LaunchServices 并重启 Finder；沙箱容器受 SIP 保护删不掉属正常（可在 Finder 里拖废纸篓）；「登录项与扩展」僵尸项可注销重登或 `sfltool resetbtm` 清除。
+
+## 4.4、gen-appicon.sh
+
+- 用途：基于 1024px 源图生成 macOS App 图标集。
+- 用法：`./scripts/gen-appicon.sh [源图路径]`（默认 `Resources/finderwand-icon-1024.png`）。
+- 说明：输出到 `Sources/Assets.xcassets/AppIcon.appiconset/`，标准 10 槽位（16/32/128/256/512 @1x/@2x）；写合法 JSON（真实换行），并确保 Asset Catalog 根 `Contents.json` 存在。
+
+## 4.5、gen-menubar-icon.sh
+
+- 用途：基于 1024px 源图生成菜单栏模板图标。
+- 用法：`./scripts/gen-menubar-icon.sh [源图路径]`（默认 `Resources/finderwand-menubar-icon-1024-light.png`）。
+- 说明：输出到 `Sources/Assets.xcassets/MenuBarIconTemplate.imageset/`，universal 1x/2x（18pt），模板渲染（`template-rendering-intent=template`），供 `NSImage(named:)` 加载后随深浅色自适应。
+
+## 4.6、发布流程（CI）
+
+- 触发：推送 tag `vX.Y.Z` → GitHub Actions（`.github/workflows/build-release.yml`）构建正式版并创建 Release 上传 `.dmg`；`workflow_dispatch` 手动触发出测试版。
+- 便捷做法（gh 已登录）：`gh api --method POST repos/AndyM129/FinderWand/git/refs -f ref="refs/tags/vX.Y.Z" -f sha="$(git rev-parse HEAD)"` 创建 tag 触发；`gh run watch <id> --exit-status` 跟踪。
