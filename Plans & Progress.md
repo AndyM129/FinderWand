@@ -102,7 +102,7 @@
 - 「关于」打开仓库主页 `https://github.com/AndyM129/FinderWand`（PRD 已同步修正为「仓库主页」）。
 - Debug 配置 `BUILD SUCCEEDED`。
 
-## 2.4、M3：Finder 右键菜单核心能力（状态：未开始）
+## 2.4、M3：Finder 右键菜单核心能力（状态：spike 验证中）
 
 目标：在任意路径下呼出 Finder 右键菜单时，动态生成菜单项并执行动作。
 
@@ -115,8 +115,27 @@
 
 进展记录：
 
-- 待补充。
-- 待决策：Finder 右键菜单的具体实现方案，以及是否需要独立的扩展 target。
+- 方案调研（2026-07-18）：对比 Finder Sync Extension、Services 菜单、自建方案，结论是 Finder Sync Extension 是唯一能满足「任意路径、每次右键动态生成多级菜单」的受支持 API，倾向采用。关键事实与风险如下。
+- 可行性（可行）：
+  - 右键菜单入口：实现 `FIFinderSync` 子类的 `menu(for:)`，`FIMenuKindContextualMenuForItems`/`ForContainer` 覆盖「选中项/空白处」两种右键场景。
+  - 覆盖任意路径：`FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/")]`（监控根目录）即可让菜单在任意路径出现，多方来源验证可行。
+  - 获取上下文：`targetedURL()` 拿右键点击的目标，`selectedItemURLs()` 拿所有选中项（仅在 `menu(for:)` 及其 action 内有效）。
+  - 动态多级菜单：`menu(for:)` 返回的 `NSMenu` 支持子菜单嵌套，可按脚本输出构建。
+- 主要风险：
+  - R1（高，无付费账号）：扩展必须随包分发且需签名。ad-hoc 签名（无 Developer ID）下，Gatekeeper 要求用户先手动信任并打开主 App，才能启用扩展；`.dmg` 分发会带 quarantine，需用户清除或批准。首次启用需在「系统设置 > 通用 > 登录项与扩展」手动开启。可用但有一次性手动门槛，且跨系统版本稳定性需实测。
+  - R2（高，沙箱强制）：Finder Sync 扩展必须开启 App Sandbox，否则系统拒绝加载。沙箱内无法自由执行任意 `.sh` 或访问任意路径（子进程继承沙箱）。因此需架构拆分：沙箱内的扩展只负责收集路径与构建菜单，把「执行脚本」通过 XPC 委托给非沙箱的主 App 执行。
+  - R3（中）：`menu(for:)` 是同步调用，若右键时同步跑脚本决定菜单项，脚本慢会卡住 Finder。需设超时与快速返回策略。
+  - R4（中，与「无权限弹窗」约束冲突）：主 App（非沙箱）执行脚本访问「桌面/文档/下载」等 TCC 保护目录时，首次会触发系统授权弹窗。规避方式是让用户一次性授予「完全磁盘访问」，属一次性设置而非每次弹窗。
+  - R5（低到中）：监控根目录 `/` 属非常规用法，我们只用右键菜单、不加 badge，额外开销有限，但需实测。
+- 架构结论：主 App（非沙箱, LSUIElement）+ Finder Sync Extension（沙箱, appex）通过 XPC 通信；扩展负责菜单 UI 与路径收集，主 App 负责遍历 `.sh`、执行脚本与解析输出。
+- 待决策：是否接受 R1/R4 的一次性手动设置（信任 App、开启扩展、授予完全磁盘访问）作为使用前提；是否先做技术验证（spike）确认 ad-hoc 扩展能在你的 macOS 26 上加载并弹出右键菜单，再正式开发 M3。
+- 决策（2026-07-18）：采用 Finder Sync Extension 方案；用户接受一次性手动设置；先做 spike 验证。
+- spike 已构建（2026-07-18）：
+  - `project.yml` 新增 `FinderWandSync`（`app-extension`，沙箱）target 并嵌入主 App（`Contents/PlugIns/FinderWandSync.appex`）。
+  - `FinderSyncExtension/FinderSync.swift`：`FIFinderSync` 子类，监控根目录 `/`，`menu(for:)` 提供「Finder Wand: 测试点位」菜单项，点击发送 Darwin 通知。
+  - `Sources/SpikeMonitor.swift`：主 App 监听该 Darwin 通知，收到后向 `~/.config/FinderWand/spike.log` 追加时间戳，验证「沙箱扩展 → 非沙箱主 App」链路。
+  - 构建校验：Debug `BUILD SUCCEEDED`，appex 正确嵌入；Info.plist 含 `NSExtensionPointIdentifier=com.apple.FinderSync`、`NSExtensionPrincipalClass=FinderWandSync.FinderSync`；BundleID `io.github.andym129.dev.finder-wand.FinderSync`；ad-hoc 签名且含 `app-sandbox` 权限。
+  - 待用户手动验证：启动 App 注册扩展 → 系统设置开启扩展 → 任意路径右键应出现菜单项 → 点击后 `spike.log` 应追加记录。
 
 ## 2.5、M4：插件协议完善（状态：未开始）
 

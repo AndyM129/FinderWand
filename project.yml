@@ -21,6 +21,47 @@ targets:
     configFiles:
       Debug: Configs/Dev.xcconfig
       Release: Configs/Release.xcconfig
+    # 嵌入 Finder Sync 扩展（appex 放入 Contents/PlugIns）
+    dependencies:
+      - target: FinderWandSync
+        embed: true
+
+  # Finder Sync 扩展（沙箱 appex）
+  FinderWandSync:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: FinderSyncExtension
+    info:
+      path: FinderSyncExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Finder Wand
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.FinderSync
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FinderSync
+    entitlements:
+      path: FinderSyncExtension/FinderWandSync.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-only: true
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_VERSION: "5.0"
+        SKIP_INSTALL: YES
+        # 版本号需与主 App 保持一致（CI 打包时由 xcodebuild 统一覆盖）
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # 无付费账号：ad-hoc 签名，不强制签名
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.dev.finder-wand.FinderSync
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.finder-wand.FinderSync
 
 schemes:
   FinderWand:

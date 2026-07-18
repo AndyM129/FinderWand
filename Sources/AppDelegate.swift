@@ -9,5 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         menuBarController = MenuBarController()
+        // M3 spike：监听 Finder Sync 扩展的 Darwin 通知
+        SpikeMonitor.shared.start()
     }
 }
