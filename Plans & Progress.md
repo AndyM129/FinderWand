@@ -146,6 +146,14 @@
   - 修正（2026-07-18）：沙箱扩展直接读插件目录不可行（`home` 解析为容器、`temporary-exception` 实测未生效，右键显示「无插件」）。改为「清单中转」方案：主 App 枚举 `.sh` 并把清单写入扩展容器内（`.../Data/Library/Application Support/FinderWandIPC/manifest.json`），扩展只读自己容器内的清单构建菜单，无需任何插件目录读权限。主 App 在启动、收到扩展 refresh 通知、以及插件目录变更（`DispatchSource` 监听）时刷新清单。已移除扩展的 `temporary-exception` 权限。`Sources/DarwinObserverRegistry.swift` 按通知名分发 Darwin 通知。
   - 修正（2026-07-18）：点击菜单项无反应，定位为 `NSMenuItem.representedObject` 无法跨 Finder Sync 的 XPC 存活；改用菜单项 `title` 回查清单取脚本路径（title 可靠存活）。
   - slice 1 已验证通过（2026-07-18）：右键任意路径出现 `hello`，点击后 `run.log` 记录脚本执行结果（`exit=0`、`currentDir`、`selected`、stdout 均正确）。整条链路成立：扩展菜单 → title 回查清单 → 写请求到容器 → Darwin → 主 App 执行脚本 → 写日志。诊断代码已移除。
+- slice 2 已实现（2026-07-18，xbar 风格动态多级菜单，待运行验证）：
+  - IPC 升级为「请求/响应」往返：扩展在 `menu(for:)` 内写 build 请求并轮询 build 响应（超时 2.5s），主 App 收到 build 通知后遍历插件目录执行每个 `.sh`、解析输出为菜单规格返回。清单机制已废弃。
+  - 精简插件协议（`Sources/PluginOutputParser.swift`）：每行一个菜单项；前导 `--` 对表示层级；纯 `-`（>=3）为分隔线；`标题 | key=value`，支持 `bash=`/`paramN=`、`href=`、`disabled=true`；脚本不输出即不显示（条件显示/隐藏）。
+  - 动作执行（`Sources/PluginService.swift`）：可执行叶子在构建时登记 `actionId`（含点击上下文），点击时扩展用菜单项 `tag` 携带 `actionId` 通知主 App，主 App 执行 `bash`（带 `FW_CURRENT_DIR`/`FW_SELECTED_PATHS` 与 argv）或打开 `href`，结果写 `run.log`。
+  - 每脚本执行超时 1.5s，避免卡 Finder。
+  - 示例插件 `~/.config/FinderWand/hello.sh` 已改写为多级 + 条件显示示例。
+  - 构建校验：Debug `BUILD SUCCEEDED`。待用户运行验证：右键出现「Finder Wand 示例」及其子菜单，选中文件时出现「对所选执行」，点击子项执行成功（`run.log` 记录、终端/浏览器/默认程序被正确调起）。
+  - 风险待观察：`NSMenuItem.tag` 是否跨 Finder Sync XPC 稳定存活（representedObject 已证实不存活）；若 tag 也丢失需改用其他标识。
 - slice 2（待做）：xbar 风格动态多级菜单与条件显示（脚本输出决定菜单结构），需在 `menu(for:)` 同步经 IPC 取脚本输出并设超时。
 
 ## 2.5、M4：插件协议完善（状态：未开始）

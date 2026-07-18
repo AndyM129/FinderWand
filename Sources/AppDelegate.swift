@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         menuBarController = MenuBarController()
-        // 监听 Finder Sync 扩展的插件动作请求
-        PluginActionService.shared.start()
+        // 监听 Finder Sync 扩展的菜单构建与动作请求
+        PluginService.shared.start()
     }
 }

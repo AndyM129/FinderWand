@@ -2,87 +2,151 @@ import Foundation
 import AppKit
 import FinderSync
 
-/// Finder Sync 扩展主类（M3 slice 1）
+/// Finder Sync 扩展主类（M3 slice 2：xbar 风格动态多级菜单）
 /// 职责（沙箱内）：
 ///   1. 监控根目录，使右键菜单在任意路径出现
-///   2. 读取主 App 生成的插件清单（位于扩展容器内，无需额外权限），每个 `.sh` 作为一级菜单项
-///   3. 点击菜单项时，收集当前路径与选中项，写入 IPC 请求并通知主 App 执行
-/// 说明：扩展不直接读插件目录、也不执行脚本，全部交由非沙箱主 App，规避沙箱限制。
+///   2. 右键时同步向主 App 请求「菜单规格」（主 App 跑脚本、解析输出后返回），据此构建多级菜单
+///   3. 点击可执行项时，携带 actionId 通知主 App 执行对应动作
+/// 说明：扩展不读插件目录、不执行脚本，全部交由非沙箱主 App，规避沙箱限制。
 class FinderSync: FIFinderSync {
+
+    /// 同步等待菜单规格的超时时间（秒），避免慢脚本卡住 Finder
+    private let buildTimeout: TimeInterval = 2.5
 
     override init() {
         super.init()
-        // 监控根目录，让右键菜单在任意路径可用
         FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/")]
-        // 启动时请求主 App 生成一次清单
-        postRefreshRequest()
     }
 
-    /// 提供右键菜单：每个 `.sh` 一个一级菜单项
+    /// 右键菜单：向主 App 请求菜单规格并构建
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         let menu = NSMenu(title: "")
-        let scripts = manifestScripts()
-
-        guard !scripts.isEmpty else {
-            // 清单为空：请求主 App 重新生成，本次先占位
-            postRefreshRequest()
-            let empty = NSMenuItem(title: "Finder Wand: 无插件", action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-            menu.addItem(empty)
-            return menu
-        }
-
-        for script in scripts {
-            let item = NSMenuItem(title: script.name,
-                                  action: #selector(runPlugin(_:)),
-                                  keyEquivalent: "")
-            item.target = self
-            menu.addItem(item)
-        }
-
-        return menu
-    }
-
-    /// 从扩展容器读取主 App 生成的插件清单
-    private func manifestScripts() -> [(name: String, path: String)] {
-        let containerData = URL(fileURLWithPath: NSHomeDirectory())
-        let manifest = FWIPC.manifestFile(containerDataDirectory: containerData)
-
-        guard
-            let data = try? Data(contentsOf: manifest),
-            let array = try? JSONSerialization.jsonObject(with: data) as? [[String: String]]
-        else {
-            return []
-        }
-
-        return array.compactMap { entry in
-            guard let name = entry["name"], let path = entry["path"] else { return nil }
-            return (name, path)
-        }
-    }
-
-    /// 点击插件菜单项：收集上下文写入 IPC 请求，并通知主 App 执行
-    @objc func runPlugin(_ sender: NSMenuItem) {
-        // 用菜单项标题回查清单获取脚本路径
-        // 注意：representedObject 可能无法跨 Finder Sync 的 XPC 存活，title 可靠。
-        let name = sender.title
-        guard let script = manifestScripts().first(where: { $0.name == name }) else {
-            NSLog("FinderWand 扩展: 未在清单中找到菜单项 \(name)")
-            return
-        }
 
         let selected = (FIFinderSyncController.default().selectedItemURLs() ?? []).map { $0.path }
         let currentDir = currentDirectoryPath()
 
+        guard let items = requestMenuSpec(currentDir: currentDir, selected: selected), !items.isEmpty else {
+            let placeholder = NSMenuItem(title: "Finder Wand", action: nil, keyEquivalent: "")
+            placeholder.isEnabled = false
+            menu.addItem(placeholder)
+            return menu
+        }
+
+        appendItems(items, to: menu)
+        return menu
+    }
+
+    // MARK: - 请求菜单规格
+
+    /// 写构建请求、通知主 App、轮询响应，返回菜单项数组
+    private func requestMenuSpec(currentDir: String, selected: [String]) -> [[String: Any]]? {
+        let containerData = URL(fileURLWithPath: NSHomeDirectory())
+        let requestId = UUID().uuidString
+
+        let requestsDir = FWIPC.buildRequestsDirectory(containerDataDirectory: containerData)
+        let responsesDir = FWIPC.buildResponsesDirectory(containerDataDirectory: containerData)
+        let responseURL = responsesDir.appendingPathComponent("\(requestId).json")
+
         let request: [String: Any] = [
-            "script": script.path,
+            "id": requestId,
             "currentDir": currentDir,
             "selected": selected
         ]
 
-        writeRequest(request)
+        do {
+            try FileManager.default.createDirectory(at: requestsDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: responsesDir, withIntermediateDirectories: true)
+            let data = try JSONSerialization.data(withJSONObject: request, options: [])
+            try data.write(to: requestsDir.appendingPathComponent("\(requestId).json"))
+        } catch {
+            NSLog("FinderWand 扩展: 写构建请求失败 \(error.localizedDescription)")
+            return nil
+        }
+
+        postDarwinNotification(FWIPC.darwinBuildName)
+
+        return waitForResponse(at: responseURL)
+    }
+
+    /// 轮询等待主 App 写出的响应文件
+    private func waitForResponse(at responseURL: URL) -> [[String: Any]]? {
+        let deadline = Date().addingTimeInterval(buildTimeout)
+        let interval: useconds_t = 20_000 // 20ms
+
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: responseURL.path) {
+                defer { try? FileManager.default.removeItem(at: responseURL) }
+                guard
+                    let data = try? Data(contentsOf: responseURL),
+                    let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else {
+                    return nil
+                }
+
+                return object["items"] as? [[String: Any]]
+            }
+            usleep(interval)
+        }
+
+        return nil
+    }
+
+    // MARK: - 构建菜单
+
+    /// 递归把菜单项数组添加到菜单
+    private func appendItems(_ items: [[String: Any]], to menu: NSMenu) {
+        for item in items {
+            if item["separator"] as? Bool == true {
+                menu.addItem(.separator())
+                continue
+            }
+
+            let title = item["title"] as? String ?? ""
+            let menuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+
+            if let children = item["children"] as? [[String: Any]], !children.isEmpty {
+                let submenu = NSMenu(title: title)
+                appendItems(children, to: submenu)
+                menuItem.submenu = submenu
+            } else if let actionId = item["actionId"] as? Int {
+                menuItem.action = #selector(runAction(_:))
+                menuItem.target = self
+                menuItem.tag = actionId
+            } else {
+                menuItem.isEnabled = false
+            }
+
+            if item["enabled"] as? Bool == false {
+                menuItem.isEnabled = false
+            }
+
+            menu.addItem(menuItem)
+        }
+    }
+
+    // MARK: - 执行动作
+
+    /// 点击可执行项：携带 actionId 通知主 App 执行
+    @objc func runAction(_ sender: NSMenuItem) {
+        let actionId = sender.tag
+        guard actionId != 0 else { return }
+
+        let containerData = URL(fileURLWithPath: NSHomeDirectory())
+        let actionsDir = FWIPC.actionRequestsDirectory(containerDataDirectory: containerData)
+
+        do {
+            try FileManager.default.createDirectory(at: actionsDir, withIntermediateDirectories: true)
+            let data = try JSONSerialization.data(withJSONObject: ["actionId": actionId], options: [])
+            try data.write(to: actionsDir.appendingPathComponent("\(UUID().uuidString).json"))
+        } catch {
+            NSLog("FinderWand 扩展: 写动作请求失败 \(error.localizedDescription)")
+            return
+        }
+
         postDarwinNotification(FWIPC.darwinActionName)
     }
+
+    // MARK: - 辅助
 
     /// 推断「当前所在目录」：目标是目录则取目标，否则取其父目录
     private func currentDirectoryPath() -> String {
@@ -90,26 +154,6 @@ class FinderSync: FIFinderSync {
 
         let isDirectory = (try? targeted.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         return isDirectory ? targeted.path : targeted.deletingLastPathComponent().path
-    }
-
-    /// 将请求写入扩展容器内的 IPC 目录（主 App 可读取该路径）
-    private func writeRequest(_ request: [String: Any]) {
-        let containerData = URL(fileURLWithPath: NSHomeDirectory())
-        let requestsDir = FWIPC.requestsDirectory(containerDataDirectory: containerData)
-
-        do {
-            try FileManager.default.createDirectory(at: requestsDir, withIntermediateDirectories: true)
-            let fileURL = requestsDir.appendingPathComponent("\(UUID().uuidString).json")
-            let data = try JSONSerialization.data(withJSONObject: request, options: [])
-            try data.write(to: fileURL)
-        } catch {
-            NSLog("写入 IPC 请求失败: \(error.localizedDescription)")
-        }
-    }
-
-    /// 请求主 App 重新生成插件清单
-    private func postRefreshRequest() {
-        postDarwinNotification(FWIPC.darwinRefreshName)
     }
 
     /// 发送 Darwin 通知
