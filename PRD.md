@@ -55,7 +55,27 @@
 
 
 
-# 2、AI Coding 说明
+# 2、工程配置
+
+- 系统兼容性：
+  - Deployment Target：macOS 14.0（最低支持版本）。
+  - 推荐运行环境：macOS 15 及以上。
+- 编译、构建缓存路径：
+  - 指定到当前项目根路径下的特定文件夹中（如 `./.build` / `./DerivedData`），独立维护，避免使用 Xcode 默认全局 DerivedData 而受其他项目影响或被清理删除。
+- Target 与 BundleID：
+  - 开发版：
+    - target：Debug
+    - BundleID：`io.github.andym129.dev.finder-wand`
+    - APP Name：Finder Wand Dev
+  - 正式版：
+    - target：Release
+    - BundleID：`io.github.andym129.finder-wand`
+    - APP Name：Finder Wand
+
+
+
+
+# 3、AI Coding 说明
 
 - `PRD.md` 是整个项目的目标 & 需求文档
 - `Plans & Progress.md` 是对`PRD.md` 中任务的拆解：
