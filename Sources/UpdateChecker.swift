@@ -23,23 +23,31 @@ final class UpdateChecker {
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 15
 
-        URLSession.shared.dataTask(with: request) { data, _, error in
-            let result = Self.makeResult(data: data, error: error)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let result = Self.makeResult(data: data, response: response, error: error)
             DispatchQueue.main.async { completion(result) }
         }.resume()
     }
 
     /// 解析 API 响应得出结果
-    private static func makeResult(data: Data?, error: Error?) -> UpdateCheckResult {
+    private static func makeResult(data: Data?, response: URLResponse?, error: Error?) -> UpdateCheckResult {
         if let error = error {
             return .failed(error.localizedDescription)
         }
 
-        guard
-            let data = data,
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let tag = json["tag_name"] as? String
-        else {
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let json = data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+
+        if status == 404 {
+            return .failed("未找到正式版发布。若仓库为私有，请将其设为公开后重试。")
+        }
+
+        guard (200 ... 299).contains(status) else {
+            let message = (json?["message"] as? String) ?? "HTTP \(status)"
+            return .failed("检查更新失败：\(message)")
+        }
+
+        guard let json = json, let tag = json["tag_name"] as? String else {
             return .failed("无法解析更新信息")
         }
 
