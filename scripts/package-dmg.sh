@@ -47,12 +47,14 @@ echo "==> commit         = $GIT_SHA"
 xcodegen generate
 
 # 组装 xcodebuild 版本与签名覆盖参数
+# 注意：使用 ad-hoc 签名（CODE_SIGN_IDENTITY=-），不加 CODE_SIGNING_ALLOWED=NO，
+# 让 Xcode 在构建期就为 App 与内嵌扩展签名并带上各自的 entitlements（扩展需 app-sandbox 才能被加载）。
 BUILD_SETTINGS=(
   ARCHS="arm64 x86_64"
   ONLY_ACTIVE_ARCH=NO
   CODE_SIGN_IDENTITY="-"
+  CODE_SIGN_STYLE=Manual
   CODE_SIGNING_REQUIRED=NO
-  CODE_SIGNING_ALLOWED=NO
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 )
 if [[ -n "$MARKETING_VERSION" ]]; then
@@ -77,10 +79,19 @@ plutil -replace FWBuildChannel -string "$CHANNEL" "$PLIST"
 plutil -replace FWGitCommit -string "$GIT_SHA" "$PLIST"
 plutil -replace FWBuildTimestamp -string "$TIMESTAMP" "$PLIST"
 
-# 修改的是 App 顶层 Info.plist，内嵌扩展（appex）未改动。
-# 只重签外层 App，禁止使用 --deep：
-#   --deep 会连带重签内嵌 Finder Sync 扩展，且丢失其 entitlements（含 app-sandbox），
-#   导致扩展缺少沙箱权限而被系统拒绝加载（右键无任何菜单）。
+# 修改了 App 顶层 Info.plist 后需重新签名。
+# 从内到外签名（禁止 --deep）：
+#   1. 先重签内嵌扩展，并显式带上其 entitlements（含 app-sandbox），
+#      否则扩展缺少沙箱权限会被系统拒绝加载（右键无任何菜单）。
+#   2. 再签外层 App。
+APPEX="$APP/Contents/PlugIns/FinderWandSync.appex"
+EXT_ENTITLEMENTS="$ROOT/FinderSyncExtension/FinderWandSync.entitlements"
+if [[ -f "$EXT_ENTITLEMENTS" ]]; then
+  codesign --force --sign - --timestamp=none --entitlements "$EXT_ENTITLEMENTS" "$APPEX"
+else
+  echo "警告: 未找到扩展 entitlements（$EXT_ENTITLEMENTS），扩展可能无法加载"
+  codesign --force --sign - --timestamp=none "$APPEX"
+fi
 codesign --force --sign - --timestamp=none "$APP"
 
 SHORT_VER="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")"
