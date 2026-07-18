@@ -5,7 +5,7 @@
 #   ./scripts/gen-menubar-icon.sh [源图路径]
 #
 # 说明：
-#   - 默认使用 images/finderwand-icon-1024-v2.png 作为源图
+#   - 默认使用 Resources/finderwand-menu-icon-1024-light.png 作为源图
 #   - 菜单栏图标规格（macOS 标准）：
 #       模板图片（template image）：NSStatusBar 会自动应用 tint，
 #       文件名加 "Template" 后缀即可让 AppKit 识别为模板图标。
@@ -28,7 +28,7 @@ ROOT="${SCRIPT_DIR:h}"
 cd "$ROOT"
 
 # 源图（可通过参数覆盖）
-SRC="${1:-images/finderwand-icon-1024-v2.png}"
+SRC="${1:-Resources/finderwand-menu-icon-1024-light.png}"
 
 # 输出目录
 ASSETS_DIR="Sources/Assets.xcassets"

@@ -5,7 +5,7 @@
 #   ./scripts/gen-appicon.sh [源图路径]
 #
 # 说明：
-#   - 默认使用 images/finderwand-icon-1024-v2.png 作为源图
+#   - 默认使用 Resources/finderwand-icon-1024.png 作为源图
 #   - 输出目录：Sources/Assets.xcassets/AppIcon.appiconset/
 #   - 同时向 project.yml 注册 Assets.xcassets（若尚未注册）
 #   - 依赖：sips（macOS 内置）
@@ -18,7 +18,7 @@ ROOT="${SCRIPT_DIR:h}"
 cd "$ROOT"
 
 # 源图（可通过参数覆盖）
-SRC="${1:-images/finderwand-icon-1024-v2.png}"
+SRC="${1:-Resources/finderwand-icon-1024.png}"
 
 # 输出目录
 ASSETS_DIR="Sources/Assets.xcassets"
