@@ -55,7 +55,7 @@
 - DerivedData 已固定到 `./.build/DerivedData`；`.xcodeproj` 由 XcodeGen 生成，不纳入版本管理。
 - 构建命令：`./scripts/build.sh [Debug|Release]`（脚本自动探测 Xcode.app 并设置 `DEVELOPER_DIR`）。
 
-## 2.2、M1：打包与发布流水线（状态：进行中，待 CI 首次验证）
+## 2.2、M1：打包与发布流水线（状态：已完成）
 
 目标：实现 `.dmg` 打包与 GitHub Releases 自动发布，优先跑通打包与发布流程。
 
@@ -73,7 +73,8 @@
 - 已编写 `.github/workflows/build-release.yml`：tag `v*` 触发正式版（`prerelease=false`，版本取自 tag），`workflow_dispatch` 触发测试版（`prerelease=true`，tag 形如 `v0.1.0-beta-<短哈希>-<时间戳>`）；用 `softprops/action-gh-release@v2` 创建 Release 并上传产物。CI 内通过 `setup-xcode` 与 `brew install xcodegen` 准备环境。
 - 参考实现：EdgeMark 的 `.github/workflows/build.yml`（hdiutil 打包 + action-gh-release 的做法）。
 - 本地已验证：编译成功、版本与元信息注入成功、ad-hoc 签名成功。`.dmg` 生成本地被阻断：本机对包含 `.app` 的目录执行 `hdiutil create` 返回「操作不被允许」（TCC/App Management 限制，普通文件夹打包正常），该步骤留待 GitHub Actions（macOS runner）首次运行验证。
-- 待办：首次触发 CI（打 tag 或手动运行）验证 `.dmg` 产出与 Release 上传全链路。
+- CI 已验证通过：为使 `workflow_dispatch` 可用，已将 `master`（默认分支）快进到 `dev` 并推送。网页手动触发 beta 成功产出并可正常安装使用，产物名 `FinderWand-v0.1.0-beta-71356b4-20260718112152.dmg`，测试版命名格式 `v<版本>-beta-<短哈希>-<时间戳>` 符合预期。
+- 后续正式版发布方式：推送 tag `v0.1.0` 即触发正式版 Release。
 
 ## 2.3、M2：菜单栏基础功能（状态：未开始）
 
