@@ -44,8 +44,6 @@ typeset -a SPECS=(
   "16  2"   # 16x16   @2x → 32px
   "32  1"   # 32x32   @1x
   "32  2"   # 32x32   @2x → 64px
-  "64  1"   # 64x64   @1x  （macOS 14 不再必须但保留兼容）
-  "64  2"   # 64x64   @2x → 128px
   "128 1"   # 128x128 @1x
   "128 2"   # 128x128 @2x → 256px
   "256 1"   # 256x256 @1x
@@ -89,47 +87,43 @@ done
 # ── 写 Contents.json ─────────────────────────────────────────
 echo "==> 写入 Contents.json..."
 
-# 用 printf 拼接 JSON 数组（每项以逗号分隔，最后一项无逗号）
-JSON_BODY=""
+# 逐行输出，使用真实换行与逗号，生成合法 JSON（切勿用字面量 \n）
 total=${#JSON_IMAGES[@]}
-idx=0
-for item in "${JSON_IMAGES[@]}"; do
-  idx=$(( idx + 1 ))
-  if (( idx < total )); then
-    JSON_BODY+="${item},\n"
-  else
-    JSON_BODY+="${item}\n"
-  fi
-done
+{
+  echo '{'
+  echo '  "images" : ['
+  idx=0
+  for item in "${JSON_IMAGES[@]}"; do
+    idx=$(( idx + 1 ))
+    if (( idx < total )); then
+      printf '%s,\n' "$item"
+    else
+      printf '%s\n' "$item"
+    fi
+  done
+  echo '  ],'
+  echo '  "info" : {'
+  echo '    "author" : "xcode",'
+  echo '    "version" : 1'
+  echo '  }'
+  echo '}'
+} > "${ICONSET_DIR}/Contents.json"
 
-printf '{
-  "images" : [\n%s  ],
+# ── 确保 Asset Catalog 根 Contents.json 存在 ────────────────
+if [[ ! -f "${ASSETS_DIR}/Contents.json" ]]; then
+  cat > "${ASSETS_DIR}/Contents.json" <<'EOF'
+{
   "info" : {
-    "author"  : "xcode",
+    "author" : "xcode",
     "version" : 1
   }
-}\n' "$JSON_BODY" > "${ICONSET_DIR}/Contents.json"
-
-# ── 向 project.yml 注册 Assets.xcassets ─────────────────────
-PROJECT_YML="project.yml"
-if ! grep -q "Assets.xcassets" "$PROJECT_YML"; then
-  echo "==> 向 project.yml 注册 Assets.xcassets..."
-  # 在 FinderWand target 的 sources 列表末尾插入 Assets.xcassets
-  # 找到 "- path: Shared" 后的第一行（FinderWand target 下），在其后插入
-  perl -i -0pe \
-    's|(  FinderWand:\n    type: application\n    platform: macOS\n    sources:\n      - path: Sources\n      - path: Shared)|$1\n      - path: Sources/Assets.xcassets|' \
-    "$PROJECT_YML"
-
-  # 检查是否成功写入
-  if grep -q "Assets.xcassets" "$PROJECT_YML"; then
-    echo "    ✓ project.yml 已更新"
-  else
-    echo "    ⚠️  自动更新 project.yml 失败，请手动在 FinderWand target 的 sources 下添加："
-    echo "         - path: Sources/Assets.xcassets"
-  fi
-else
-  echo "==> project.yml 已包含 Assets.xcassets，跳过"
+}
+EOF
+  echo "==> 已创建 ${ASSETS_DIR}/Contents.json"
 fi
+
+# 说明：Assets.xcassets 位于 Sources/ 下，已随 `- path: Sources` 自动纳入构建，
+# 无需再单独向 project.yml 注册。
 
 # ── 完成 ──────────────────────────────────────────────────────
 echo ""

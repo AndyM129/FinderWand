@@ -98,8 +98,8 @@ class FinderSync: FIFinderSync {
         for item in items {
             if item["separator"] as? Bool == true {
                 // Finder Sync 右键菜单不支持原生分隔线（NSMenuItem.separator 会显示为空行），
-                // 仅用受支持的 title+enabled 属性，以一条禁用的灰色横线模拟。
-                let separator = NSMenuItem(title: "──────────", action: nil, keyEquivalent: "")
+                // 仅用受支持的 title+enabled 属性，以一行短横线模拟。
+                let separator = NSMenuItem(title: "----------", action: nil, keyEquivalent: "")
                 separator.isEnabled = false
                 menu.addItem(separator)
                 continue
@@ -107,6 +107,7 @@ class FinderSync: FIFinderSync {
 
             let title = item["title"] as? String ?? ""
             let menuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let isEnabled = (item["enabled"] as? Bool) != false
 
             if let children = item["children"] as? [[String: Any]], !children.isEmpty {
                 let submenu = NSMenu(title: title)
@@ -119,27 +120,32 @@ class FinderSync: FIFinderSync {
             }
 
             // disabled=true → 置灰（Finder Sync 支持 enabled 属性）
-            if item["enabled"] as? Bool == false {
+            if !isEnabled {
                 menuItem.isEnabled = false
             }
 
-            // 图标：按当前深浅色着色（Finder Sync 下模板图不会自动适配，需自行着色）
+            // 图标：按当前深浅色着色；禁用项图标同步变暗，与置灰标题一致
             if let symbol = item["sfimage"] as? String {
-                menuItem.image = Self.tintedSymbol(symbol, accessibilityDescription: title)
+                menuItem.image = Self.tintedSymbol(symbol, accessibilityDescription: title, enabled: isEnabled)
             }
 
             menu.addItem(menuItem)
         }
     }
 
-    /// 生成按当前系统深浅色着色的 SF Symbol 图标
-    private static func tintedSymbol(_ name: String, accessibilityDescription: String) -> NSImage? {
+    /// 生成按当前系统深浅色着色的 SF Symbol 图标（禁用项变暗）
+    private static func tintedSymbol(_ name: String, accessibilityDescription: String, enabled: Bool) -> NSImage? {
         guard let base = NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription) else {
             return nil
         }
 
         let isDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
-        let color: NSColor = isDark ? .white : .black
+        var color: NSColor = isDark ? .white : .black
+        if !enabled {
+            // 与置灰标题保持一致：降低不透明度
+            color = color.withAlphaComponent(0.35)
+        }
+
         let configuration = NSImage.SymbolConfiguration(paletteColors: [color])
         let tinted = base.withSymbolConfiguration(configuration) ?? base
         tinted.isTemplate = false

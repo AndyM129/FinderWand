@@ -18,9 +18,14 @@ final class MenuBarController: NSObject {
     private func configureButton() {
         guard let button = statusItem.button else { return }
 
-        // 暂用系统符号作为占位图标，后续里程碑替换为品牌图标
-        button.image = NSImage(systemSymbolName: "wand.and.stars",
-                               accessibilityDescription: "Finder Wand")
+        // 优先使用资源目录中的品牌模板图标（随深浅色自适应），找不到再回退系统符号
+        if let icon = NSImage(named: "MenuBarIconTemplate") {
+            icon.isTemplate = true
+            button.image = icon
+        } else {
+            button.image = NSImage(systemSymbolName: "wand.and.stars",
+                                   accessibilityDescription: "Finder Wand")
+        }
     }
 
     /// 重建下拉菜单
