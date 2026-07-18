@@ -11,5 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController = MenuBarController()
         // 监听 Finder Sync 扩展的菜单构建与动作请求
         PluginService.shared.start()
+        // 首次运行默认开启开机自启
+        LoginItemManager.shared.enableOnFirstRunIfNeeded()
     }
 }

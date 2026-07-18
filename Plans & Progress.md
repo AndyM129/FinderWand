@@ -166,7 +166,7 @@
     - 修复：只重签外层 App（`codesign --force --sign -`，不加 `--deep`）；因仅改动了 App 顶层 Info.plist，内嵌扩展不动、签名保留。已验证重签后 appex 保留 sandbox 权限，且 app/appex 签名均校验通过。
     - 影响：已发布的 v0.1.1 受此缺陷影响，需重新出包（下个 tag 的 CI 构建即为修复版）。
 
-## 2.5、M4：自动更新与开机自启（状态：未开始）
+## 2.5、M4：自动更新与开机自启（状态：待运行确认）
 
 目标：实现版本检查更新与开机自动运行。
 
@@ -178,8 +178,13 @@
 
 进展记录：
 
-- 待补充。
-- 待决策：自动更新组件选型（Sparkle 或自研轻量方案），需兼容无公证分发。
+- 决策（2026-07-18）：检查更新采用自研轻量方案（不引入 Sparkle），规避 ad-hoc 无公证下的签名/appcast 负担。
+- 已新增 `Sources/UpdateChecker.swift`：查询 `releases/latest`（自动排除 prerelease），归一化 tag（去 `v` 与 `-beta` 后缀）并语义化比较；有新版回调返回版本号、更新说明、`.dmg` 下载地址与 Release 页地址。
+- 已新增 `Sources/LoginItemManager.swift`：基于 `SMAppService.mainApp` 实现开机自启（enable/disable/toggle/状态查询），并提供首次运行默认开启（`UserDefaults` 标记，仅执行一次）。
+- `MenuBarController` 新增菜单项：「检查更新」（弹窗提示已是最新/失败/发现新版，新版可下载安装包或打开 Release 页）、「开机自动运行」（勾选态反映状态，点击切换）。菜单顺序：刷新、打开插件目录、分割线、版本号、检查更新、开机自动运行、关于、分割线、退出。
+- `AppDelegate` 在启动时调用首次运行默认开启开机自启。
+- 构建校验：Debug `BUILD SUCCEEDED`。待运行验证：菜单出现两项且行为正确；首次运行后「开机自动运行」默认勾选；检查更新在有/无新版/失败时提示正确。
+- 注意：`SMAppService` 从非 `/Applications` 路径（如 DerivedData 的 dev 构建）注册可能受限，正式验证以安装后的 Release 包为准。
 
 ## 2.6、M5：插件协议完善（状态：未开始）
 
@@ -197,5 +202,4 @@
 
 # 3、待澄清与待决策清单
 
-- Finder 右键菜单的技术实现方案（关系到 M3 全部任务）。
-- 自动更新组件选型（Sparkle 兼容性）。
+- 暂无（Finder 右键菜单方案、自动更新组件选型均已确定）。

@@ -7,6 +7,15 @@ enum AppInfo {
     /// GitHub 仓库主页
     static let repositoryURL = URL(string: "https://github.com/AndyM129/FinderWand")!
 
+    /// GitHub 仓库归属与名称（用于 Releases API）
+    static let repositoryOwner = "AndyM129"
+    static let repositoryName = "FinderWand"
+
+    /// 最新正式版 Release 的 API 地址（自动排除 prerelease）
+    static var latestReleaseAPI: URL {
+        URL(string: "https://api.github.com/repos/\(repositoryOwner)/\(repositoryName)/releases/latest")!
+    }
+
     /// 插件目录：~/.config/FinderWand
     static var pluginDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
