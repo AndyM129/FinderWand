@@ -74,11 +74,13 @@
 - 参考实现：EdgeMark 的 `.github/workflows/build.yml`（hdiutil 打包 + action-gh-release 的做法）。
 - 本地已验证：编译成功、版本与元信息注入成功、ad-hoc 签名成功。`.dmg` 生成本地被阻断：本机对包含 `.app` 的目录执行 `hdiutil create` 返回「操作不被允许」（TCC/App Management 限制，普通文件夹打包正常），该步骤留待 GitHub Actions（macOS runner）首次运行验证。
 - CI 已验证通过：为使 `workflow_dispatch` 可用，已将 `master`（默认分支）快进到 `dev` 并推送。网页手动触发 beta 成功产出并可正常安装使用，产物名 `FinderWand-v0.1.0-beta-71356b4-20260718112152.dmg`，测试版命名格式 `v<版本>-beta-<短哈希>-<时间戳>` 符合预期。
-- 后续正式版发布方式：推送 tag `v0.1.0` 即触发正式版 Release。
+- 正式版已验证：推送 tag `v0.1.0` 成功触发正式版 Release，产物可正常安装。后续正式版发布方式即为推送 `vX.Y.Z` tag。
 
-## 2.3、M2：菜单栏基础功能（状态：未开始）
+## 2.3、M2：菜单栏基础功能（状态：已完成）
 
-目标：实现系统菜单栏图标及其下拉子菜单。
+目标：实现系统菜单栏图标及其下拉子菜单（不依赖 M5 的项除外）。
+
+范围说明：「检查更新」「开机自动运行」依赖 M5 的自动更新能力，随 M5 一并开发，M2 不实现。
 
 任务：
 
@@ -86,13 +88,19 @@
 - 菜单项：刷新（重新加载配置）。
 - 菜单项：打开插件目录（在 Finder 中打开 `~/.config/FinderWand`，目录不存在时自动创建）。
 - 分割线。
-- 菜单项：当前版本号显示（区分正式版与测试版，测试版格式含 beta、commit 短哈希、时间戳，显示格式待优化）。
+- 菜单项：当前版本号显示（区分正式版与测试版，测试版格式 `v0.1.0（beta-<短哈希>-<时间戳>）`，复用 M1 注入的 `FWBuildChannel`/`FWGitCommit`/`FWBuildTimestamp`）。
+- 菜单项：关于 Finder Wand（在浏览器打开项目 GitHub 主页）。
 - 分割线。
 - 菜单项：退出 Finder Wand。
 
 进展记录：
 
-- 待补充。
+- 已新增 `Sources/AppInfo.swift`：集中提供版本号、构建渠道、仓库地址、插件目录（`~/.config/FinderWand`）、当前版本 Release 页地址。`displayVersion` 按渠道输出：正式版 `v0.1.0`，测试版 `v0.1.0（beta-<短哈希>-<时间戳>）`，本地开发 `v0.1.0（dev）`。
+- 已新增 `Sources/MenuBarController.swift`：承接菜单栏 `NSStatusItem` 与菜单构建/动作（刷新、打开插件目录、版本号、关于、退出）。`AppDelegate` 精简为仅创建该控制器。
+- 「打开插件目录」会先 `createDirectory(withIntermediateDirectories:)` 再用 `NSWorkspace` 打开，目录不存在时自动创建。已验证可正常创建并打开 `~/.config/FinderWand`。
+- 「当前版本号」改为可点击，点击打开当前版本对应的 Release 页（`releaseTag`：正式版 `vX.Y.Z`，测试版 `vX.Y.Z-beta-<短哈希>-<时间戳>`；本地开发无对应 tag，改为打开 Releases 列表页）。
+- 「关于」打开仓库主页 `https://github.com/AndyM129/FinderWand`（PRD 已同步修正为「仓库主页」）。
+- Debug 配置 `BUILD SUCCEEDED`。
 
 ## 2.4、M3：Finder 右键菜单核心能力（状态：未开始）
 
@@ -130,9 +138,9 @@
 
 任务：
 
-- 检查更新：查询 GitHub Releases 是否有新安装包，有则弹窗提示（新版本号、更新说明、立即安装按钮）。优先复用成熟开源组件（如 Sparkle，需评估无签名场景下的可用性）。
-- 开机自动运行：菜单项可切换状态，App 首次运行时默认开启。
-- 关于 Finder Wand：点击在浏览器打开当前项目当前版本的 GitHub 主页。
+- 检查更新：查询 GitHub Releases 是否有新安装包，有则弹窗提示（新版本号、更新说明、立即安装按钮）。优先复用成熟开源组件（如 Sparkle，需评估无签名场景下的可用性）。菜单项插入到「版本号」与「关于」之间。
+- 开机自动运行：菜单项可切换状态，App 首次运行时默认开启。菜单项插入到「检查更新」之后。
+- 备注：「关于 Finder Wand」已在 M2 实现。
 
 进展记录：
 
