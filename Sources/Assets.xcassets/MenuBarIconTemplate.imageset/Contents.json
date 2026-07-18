@@ -1,0 +1,35 @@
+{
+  "images" : [
+    {
+      "filename" : "MenuBarIconTemplate_16x16@1x.png",
+      "idiom"    : "mac",
+      "scale"    : "1x"
+    },\n    {
+      "filename" : "MenuBarIconTemplate_16x16@2x.png",
+      "idiom"    : "mac",
+      "scale"    : "2x"
+    },\n    {
+      "filename" : "MenuBarIconTemplate_18x18@1x.png",
+      "idiom"    : "mac",
+      "scale"    : "1x"
+    },\n    {
+      "filename" : "MenuBarIconTemplate_18x18@2x.png",
+      "idiom"    : "mac",
+      "scale"    : "2x"
+    },\n    {
+      "filename" : "MenuBarIconTemplate_32x32@1x.png",
+      "idiom"    : "mac",
+      "scale"    : "1x"
+    },\n    {
+      "filename" : "MenuBarIconTemplate_32x32@2x.png",
+      "idiom"    : "mac",
+      "scale"    : "2x"
+    }\n  ],
+  "info" : {
+    "author"  : "xcode",
+    "version" : 1
+  },
+  "properties" : {
+    "template-rendering-intent" : "template"
+  }
+}

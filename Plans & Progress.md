@@ -206,6 +206,11 @@
   - 涉及文件：`PluginOutputParser.swift`（新增字段与参数解析）、`PluginService.swift`（序列化新字段、terminal 执行、构建期错误节点）、`FinderSync.swift`（图标与样式渲染）。
   - 构建校验：Debug `BUILD SUCCEEDED`。待运行验证：图标/颜色显示、`terminal=true` 打开终端执行、脚本报错时出现警告项。
   - 未做：`refresh=true`（对右键菜单意义较小，用户未选）。
+  - 调研结论与修正（2026-07-18，依据 Apple `FIFinderSync.h` 头文件说明）：Finder Sync 右键菜单只保留菜单项的 `title`/`action`/`image`/`enabled`/`tag`/`state`/`indentationLevel` 与子菜单，**不支持 `attributedTitle`（即无法设置文本颜色/字体），也不支持原生分隔线**（`NSMenuItem.separator()` 显示为空行）。据此修正：
+    - 文本颜色/字体：确认不支持，已移除 `color`/`font`/`size`；`disabled=true` 恢复为「置灰」（`enabled` 属性受支持）。
+    - 分隔线：原生不支持（顶层与子菜单皆然），统一以一条禁用的灰色横线 `──────────` 模拟。
+    - 图标：`image` 受支持，但模板图在 Finder Sync 下不会随深浅色自动适配，改为在扩展内按当前系统外观（`AppleInterfaceStyle`）用 `SymbolConfiguration(paletteColors:)` 着色（暗色白、浅色黑）。
+    - 示例插件 `example.sh` 已按上述能力更新（移除颜色/字体演示）。
 - 备注：示例插件 `~/.config/FinderWand/hello.sh` 由用户自行维护，未覆盖其内容。
 
 # 3、待澄清与待决策清单

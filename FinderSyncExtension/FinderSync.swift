@@ -94,22 +94,14 @@ class FinderSync: FIFinderSync {
     // MARK: - 构建菜单
 
     /// 递归把菜单项数组添加到菜单
-    /// - Parameter isSubmenu: 是否为子菜单。顶层菜单项会被 Finder 合并进右键菜单，
-    ///   其中原生分隔线会被渲染成空行；子菜单是我们自有的 NSMenu，原生分隔线可正常显示。
     private func appendItems(_ items: [[String: Any]], to menu: NSMenu, isSubmenu: Bool = false) {
         for item in items {
             if item["separator"] as? Bool == true {
-                if isSubmenu {
-                    // 子菜单内使用系统原生分隔线
-                    menu.addItem(.separator())
-                } else {
-                    // 顶层：Finder 会把原生分隔线渲染成空行，用一条灰色横线模拟
-                    let separator = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-                    separator.attributedTitle = NSAttributedString(
-                        string: "──────────",
-                        attributes: [.foregroundColor: NSColor.tertiaryLabelColor])
-                    menu.addItem(separator)
-                }
+                // Finder Sync 右键菜单不支持原生分隔线（NSMenuItem.separator 会显示为空行），
+                // 仅用受支持的 title+enabled 属性，以一条禁用的灰色横线模拟。
+                let separator = NSMenuItem(title: "──────────", action: nil, keyEquivalent: "")
+                separator.isEnabled = false
+                menu.addItem(separator)
                 continue
             }
 
@@ -125,66 +117,33 @@ class FinderSync: FIFinderSync {
                 menuItem.target = self
                 menuItem.tag = actionId
             }
-            // 说明：无 action 的项作为「标签」。不主动置为 disabled，
-            // 因为 Finder Sync 会忽略 disabled，且置灰会盖掉自定义颜色/字体。
 
-            applyStyle(item, to: menuItem, title: title)
+            // disabled=true → 置灰（Finder Sync 支持 enabled 属性）
+            if item["enabled"] as? Bool == false {
+                menuItem.isEnabled = false
+            }
+
+            // 图标：按当前深浅色着色（Finder Sync 下模板图不会自动适配，需自行着色）
+            if let symbol = item["sfimage"] as? String {
+                menuItem.image = Self.tintedSymbol(symbol, accessibilityDescription: title)
+            }
+
             menu.addItem(menuItem)
         }
     }
 
-    /// 应用图标与文本样式（sfimage / color / font / size）
-    private func applyStyle(_ item: [String: Any], to menuItem: NSMenuItem, title: String) {
-        if let symbol = item["sfimage"] as? String {
-            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
-            // 作为模板图，跟随系统外观（暗色显示为白色，浅色为黑色）
-            image?.isTemplate = true
-            menuItem.image = image
+    /// 生成按当前系统深浅色着色的 SF Symbol 图标
+    private static func tintedSymbol(_ name: String, accessibilityDescription: String) -> NSImage? {
+        guard let base = NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription) else {
+            return nil
         }
 
-        var attributes: [NSAttributedString.Key: Any] = [:]
-        if let colorString = item["color"] as? String, let color = Self.color(from: colorString) {
-            attributes[.foregroundColor] = color
-        }
-
-        let size = (item["size"] as? Double).map { CGFloat($0) } ?? NSFont.systemFontSize
-        if let fontName = item["font"] as? String, let font = NSFont(name: fontName, size: size) {
-            attributes[.font] = font
-        } else if item["size"] != nil {
-            attributes[.font] = NSFont.systemFont(ofSize: size)
-        }
-
-        if !attributes.isEmpty {
-            menuItem.attributedTitle = NSAttributedString(string: title, attributes: attributes)
-        }
-    }
-
-    /// 解析颜色：支持常见颜色名与 #RRGGBB
-    private static func color(from string: String) -> NSColor? {
-        let value = string.trimmingCharacters(in: .whitespaces).lowercased()
-        switch value {
-        case "red": return .systemRed
-        case "green": return .systemGreen
-        case "blue": return .systemBlue
-        case "orange": return .systemOrange
-        case "yellow": return .systemYellow
-        case "purple": return .systemPurple
-        case "gray", "grey": return .systemGray
-        case "black": return .black
-        case "white": return .white
-        default:
-            break
-        }
-
-        guard value.hasPrefix("#"), value.count == 7 else { return nil }
-
-        let hex = String(value.dropFirst())
-        guard let intValue = Int(hex, radix: 16) else { return nil }
-
-        let r = CGFloat((intValue >> 16) & 0xFF) / 255
-        let g = CGFloat((intValue >> 8) & 0xFF) / 255
-        let b = CGFloat(intValue & 0xFF) / 255
-        return NSColor(red: r, green: g, blue: b, alpha: 1)
+        let isDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
+        let color: NSColor = isDark ? .white : .black
+        let configuration = NSImage.SymbolConfiguration(paletteColors: [color])
+        let tinted = base.withSymbolConfiguration(configuration) ?? base
+        tinted.isTemplate = false
+        return tinted
     }
 
     // MARK: - 执行动作

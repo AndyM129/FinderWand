@@ -120,9 +120,6 @@ final class PluginService {
             var dict: [String: Any] = ["title": node.title, "enabled": node.enabled]
 
             if let sfimage = node.sfimage { dict["sfimage"] = sfimage }
-            if let color = node.color { dict["color"] = color }
-            if let fontName = node.fontName { dict["font"] = fontName }
-            if let fontSize = node.fontSize { dict["size"] = fontSize }
 
             if !node.children.isEmpty {
                 dict["children"] = serialize(node.children, currentDir: currentDir, selected: selected)

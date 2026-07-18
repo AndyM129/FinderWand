@@ -18,6 +18,7 @@ targets:
     sources:
       - path: Sources
       - path: Shared
+      - path: Sources/Assets.xcassets
     # 按配置分别引入 xcconfig，区分 Dev 版与正式版
     configFiles:
       Debug: Configs/Dev.xcconfig

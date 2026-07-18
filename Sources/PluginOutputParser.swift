@@ -18,12 +18,6 @@ final class MenuNode {
 
     /// SF Symbol 图标名（sfimage=）
     var sfimage: String?
-    /// 文本颜色（color=，支持颜色名或 #RRGGBB）
-    var color: String?
-    /// 字体名（font=）
-    var fontName: String?
-    /// 字号（size=）
-    var fontSize: Double?
 
     init(title: String, isSeparator: Bool = false, enabled: Bool = true, action: PluginAction? = nil) {
         self.title = title
@@ -43,10 +37,14 @@ final class MenuNode {
 ///       - `bash=<可执行路径>`（或 `shell=`）与 `param0..paramN=<arg>` 表示点击执行的命令与参数。
 ///       - `terminal=true` 表示在终端中运行（可见输出），默认后台静默执行。
 ///       - `href=<url>` 表示点击打开链接。
-///       - `disabled=true` 表示不可点击。
-///       - `sfimage=<SF Symbol 名>` 为菜单项加图标。
-///       - `color=<颜色名或 #RRGGBB>`、`font=<字体名>`、`size=<字号>` 控制文本样式。
+///       - `disabled=true` 表示不可点击（置灰）。
+///       - `sfimage=<SF Symbol 名>` 为菜单项加图标（图标会按当前深浅色着色）。
 ///   - 脚本输出为空即不贡献任何菜单项（实现条件显示/隐藏）。
+///
+/// Finder Sync 限制（经确认）：右键菜单仅保留 `title`/`action`/`image`/`enabled`/`tag`/`state`/
+/// `indentationLevel` 与子菜单；不支持 `attributedTitle`（即无法设置文本颜色/字体），
+/// 也不支持原生分隔线（`NSMenuItem.separator()` 会显示为空行）。因此本实现不提供 color/font，
+/// 分隔线以一条禁用的灰色横线模拟。
 enum PluginOutputParser {
 
     /// 解析脚本输出为菜单节点树
@@ -94,9 +92,6 @@ enum PluginOutputParser {
         }
 
         node.sfimage = params["sfimage"]
-        node.color = params["color"]
-        node.fontName = params["font"]
-        node.fontSize = params["size"].flatMap { Double($0) }
 
         if let href = params["href"] {
             node.action = .href(href)
