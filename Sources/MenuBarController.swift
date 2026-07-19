@@ -126,6 +126,8 @@ final class MenuBarController: NSObject {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         // 勾选态反映是否启用
         item.state = metadata.enabled ? .on : .off
+        // 插件图标（iconUrl，网络图缓存 / 文件夹内相对图）
+        item.image = PluginIconLoader.icon(for: plugin)
 
         let detail = NSMenu()
         addInfoItem(to: detail, "ID", plugin.id)
