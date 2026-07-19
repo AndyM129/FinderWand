@@ -294,6 +294,13 @@ final class PluginService {
         process.arguments = args
 
         var environment = ProcessInfo.processInfo.environment
+        // 兜底 UTF-8 locale：LaunchServices 启动的 GUI 应用通常不带 LANG/LC_*，
+        // 子进程继承后，pbcopy 等依赖 locale 的工具会按 C/POSIX 处理输入，
+        // 遇到中文等非 ASCII 字节会被丢弃（如复制含中文的路径会得到空剪贴板）。
+        // 仅在调用方未显式设置时补默认值，不覆盖用户既有配置。
+        if environment["LC_ALL"] == nil, environment["LC_CTYPE"] == nil, environment["LANG"] == nil {
+            environment["LC_CTYPE"] = "UTF-8"
+        }
         environment["FW_CURRENT_DIR"] = currentDir
         environment["FW_SELECTED_PATHS"] = selected.joined(separator: "\n")
         // 插件所在目录，便于目录化插件引用自身携带的资源（如相对图片、辅助脚本）
