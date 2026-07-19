@@ -188,10 +188,10 @@ if [[ "$HAS_BG" == "1" ]]; then
   BG_W="${BG_W:-640}"
   BG_H="${BG_H:-400}"
 
-  APP_X=$(( BG_W * 28 / 100 ))
-  APP_Y=$(( BG_H * 52 / 100 ))
-  ALIAS_X=$(( BG_W * 72 / 100 ))
-  ALIAS_Y=$(( BG_H * 52 / 100 ))
+  APP_X=$(( BG_W * 10 / 100 ))
+  APP_Y=$(( BG_H * 10 / 100 ))
+  ALIAS_X=$(( BG_W * 40 / 100 ))
+  ALIAS_Y=$(( BG_H * 10 / 100 ))
   WIN_R=$(( 100 + BG_W ))
   WIN_B=$(( 100 + BG_H ))
 
