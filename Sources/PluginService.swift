@@ -252,27 +252,58 @@ final class PluginService {
         }
     }
 
-    /// 在 Terminal 中运行命令：写一个临时 .command 包装脚本并用 open 打开
+    /// 在 Terminal 中运行命令：对齐旧版实现，用独立的 /usr/bin/osascript 进程发送
+    /// `tell application "Terminal" ... do script <命令行>`，把真实命令行直接送进终端执行。
+    ///
+    /// 相比临时 .command 包装脚本的优点：
+    /// - 终端里显示并执行的就是真实命令行（含环境变量与脚本调用），而非一个临时脚本路径；
+    /// - `do script` 执行完命令后 shell 仍是交互式，用户可继续输入，无需再 `exec` 顶替；
+    /// - 用独立 osascript 二进制而非进程内 NSAppleScript，规避 ad-hoc 签名下自动化静默失败。
     private func runInTerminal(path: String, args: [String], currentDir: String, selected: [String]) {
-        let wrapper = FileManager.default.temporaryDirectory
-            .appendingPathComponent("finderwand-\(UUID().uuidString).command")
-
-        var lines = ["#!/bin/bash"]
-        lines.append("export FW_CURRENT_DIR=\(shellQuote(currentDir))")
-        lines.append("export FW_SELECTED_PATHS=\(shellQuote(selected.joined(separator: "\n")))")
+        // 组装命令行：先 cd 到目标目录，再以「环境变量前缀 + 脚本调用」形式执行。
+        // 各段用 " \\\n"（空格 + 反斜杠 + 换行）连接成 shell 续行，便于在终端里分行展示。
+        var segments: [String] = []
         if !currentDir.isEmpty {
-            lines.append("cd \(shellQuote(currentDir))")
+            segments.append("cd \(shellQuote(currentDir)) &&")
         }
-        lines.append(([path] + args).map(shellQuote).joined(separator: " "))
+        segments.append("FW_CURRENT_DIR=\(shellQuote(currentDir))")
+        segments.append("FW_SELECTED_PATHS=\(shellQuote(selected.joined(separator: "\n")))")
+        segments.append("FW_PLUGIN_DIR=\(shellQuote(URL(fileURLWithPath: path).deletingLastPathComponent().path))")
+        segments.append(([path] + args).map(shellQuote).joined(separator: " "))
+        let commandLine = segments.joined(separator: " \\\n")
 
+        // 把「清屏」与「真实命令」作为同一段脚本发给终端：先 clear 再执行，避免两次
+        // do script 异步返回导致清屏时机错乱。clear 清可见区，printf \e[3J 清回滚缓冲。
+        let fullScript = "clear && printf '\\e[3J'\n" + commandLine
+
+        // 转义为 AppleScript 字符串字面量：AppleScript 支持 \\ \" \n 转义，
+        // 需把真实反斜杠、双引号、换行分别转义，使 do script 收到含续行与换行的多行命令。
+        let asStringLiteral = "\"" + fullScript
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            + "\""
+
+        let appleScript = """
+        set commandLine to \(asStringLiteral)
+        if application "Terminal" is running then
+            tell application "Terminal"
+                activate
+                do script commandLine
+            end tell
+        else
+            tell application "Terminal"
+                activate
+                do script commandLine in window 1
+            end tell
+        end if
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", appleScript]
         do {
-            try (lines.joined(separator: "\n") + "\n").write(to: wrapper, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
-
-            let open = Process()
-            open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            open.arguments = ["-a", "Terminal", wrapper.path]
-            try open.run()
+            try process.run()
         } catch {
             NSLog("在终端运行失败: \(error.localizedDescription)")
         }
