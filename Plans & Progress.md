@@ -268,6 +268,10 @@
   - 修复：菜单栏原为启动时一次性构建的静态菜单，改 `enabled` 后不点刷新不更新；改为持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前 `populateMenu` 重新枚举，插件启用态/版本/开机自启勾选等动态信息实时。
   - 增强：插件子菜单新增「停用该插件 / 启用该插件」快速开关，改写 `main.sh` 头部 `enabled` 字段（`PluginMetadataStore.setEnabled`：块内有则改值、无则在闭合前插入、无块则在 shebang 后插最小块；写入后失效该文件缓存）。
   - 构建校验：Debug `BUILD SUCCEEDED`。
+- 2026-07-19，slice 3（新建插件）已实现：
+  - 新增内置模板 `Resources/TemplatePlugin/main.sh`（元信息头骨架 + 示例菜单），`project.yml` 以文件夹引用（`type: folder`）打入 App 资源。
+  - 菜单栏新增「新建插件」：将内置 `TemplatePlugin` 拷到插件目录（同名则追加 `yyyyMMddHHmmss` 时间戳后缀），发通知并在 Finder 打开新文件夹。
+  - 构建校验：Debug `BUILD SUCCEEDED`，产物内 `Contents/Resources/TemplatePlugin/main.sh` 存在。
 - 后续 slice（未做）：`iconUrl` / `previewUrl` 相对图解析与消费、分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
 - 2026-07-19，slice 2 修复与增强：
   - 修复：菜单栏菜单是启动时一次性构建的静态菜单，改 `enabled` 后不点刷新不更新。改为持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前 `populateMenu` 重新枚举，插件启用态/版本/开机自启勾选等动态信息实时。

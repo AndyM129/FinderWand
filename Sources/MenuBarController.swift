@@ -38,7 +38,7 @@ final class MenuBarController: NSObject {
     private func populateMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(actionItem(title: "刷新",
+        menu.addItem(actionItem(title: "刷新右键菜单",
                                 action: #selector(refresh),
                                 keyEquivalent: "r"))
         menu.addItem(actionItem(title: "打开插件目录",
@@ -46,6 +46,9 @@ final class MenuBarController: NSObject {
 
         // 已安装插件：列出各插件的标题、版本、启用态等信息
         menu.addItem(installedPluginsMenuItem())
+
+        menu.addItem(actionItem(title: "新建自定义插件",
+                                action: #selector(newPluginFromTemplate)))
 
         menu.addItem(.separator())
 
@@ -170,7 +173,42 @@ final class MenuBarController: NSObject {
         NSWorkspace.shared.open(directory)
     }
 
-    /// 在 Finder 中显示某插件的文件夹
+    /// 新建插件：将 App 内置的模板文件夹拷贝到插件目录（同名则加时间戳后缀），通知并打开该文件夹
+    @objc private func newPluginFromTemplate() {
+        guard let template = Bundle.main.url(forResource: "TemplatePlugin", withExtension: nil) else {
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 未找到内置插件模板")
+            return
+        }
+
+        let directory = AppInfo.pluginDirectory
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        // 目标文件夹：与模板同名，若已存在则追加时间戳后缀
+        let baseName = template.lastPathComponent
+        var destination = directory.appendingPathComponent(baseName, isDirectory: true)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            destination = directory.appendingPathComponent("\(baseName)-\(timestampSuffix())", isDirectory: true)
+        }
+
+        do {
+            try FileManager.default.copyItem(at: template, to: destination)
+        } catch {
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 新建插件失败：\(error.localizedDescription)")
+            return
+        }
+
+        UserNotifier.notify(title: "Finder Wand", body: "✨ 已新建插件「\(destination.lastPathComponent)」")
+        NSWorkspace.shared.open(destination)
+
+        if let menu = statusItem.menu { populateMenu(menu) }
+    }
+
+    /// 生成用于文件夹去重的时间戳后缀（形如 20260719131005）
+    private func timestampSuffix() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMddHHmmss"
+        return formatter.string(from: Date())
+    }
     @objc private func openPluginFolder(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
 

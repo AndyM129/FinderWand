@@ -19,6 +19,10 @@ targets:
       - path: Sources
       - path: Shared
       - path: Sources/Assets.xcassets
+      # 新建插件用的模板文件夹，作为文件夹引用整体打入 App 资源，保留目录结构
+      - path: Resources/TemplatePlugin
+        type: folder
+        buildPhase: resources
     # 按配置分别引入 xcconfig，区分 Dev 版与正式版
     configFiles:
       Debug: Configs/Dev.xcconfig
