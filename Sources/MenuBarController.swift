@@ -11,7 +11,12 @@ final class MenuBarController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         configureButton()
-        rebuildMenu()
+
+        // 菜单设为持久实例并设代理，每次打开前重新填充，保证插件启用态等动态信息实时
+        let menu = NSMenu()
+        menu.delegate = self
+        statusItem.menu = menu
+        populateMenu(menu)
     }
 
     /// 配置菜单栏按钮图标
@@ -28,10 +33,10 @@ final class MenuBarController: NSObject {
         }
     }
 
-    /// 重建下拉菜单
-    /// 菜单项：刷新、打开插件目录、分割线、版本号、检查更新、开机自动运行、关于、分割线、退出。
-    private func rebuildMenu() {
-        let menu = NSMenu()
+    /// 填充下拉菜单（清空后重建），每次菜单打开前调用以保证动态信息实时
+    /// 菜单项：刷新、打开插件目录、已安装插件、分割线、版本号、检查更新、开机自动运行、关于、分割线、退出。
+    private func populateMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
 
         menu.addItem(actionItem(title: "刷新",
                                 action: #selector(refresh),
@@ -65,8 +70,6 @@ final class MenuBarController: NSObject {
         menu.addItem(actionItem(title: "退出 Finder Wand",
                                 action: #selector(quit),
                                 keyEquivalent: "q"))
-
-        statusItem.menu = menu
     }
 
     /// 构建一个以 self 为 target 的菜单项
@@ -144,7 +147,7 @@ final class MenuBarController: NSObject {
 
     /// 刷新：重建菜单，同时重新枚举已安装插件（元信息按 mtime 缓存，改动会自动反映）
     @objc private func refresh() {
-        rebuildMenu()
+        if let menu = statusItem.menu { populateMenu(menu) }
     }
 
     /// 打开插件目录（不存在则自动创建）
@@ -221,11 +224,21 @@ final class MenuBarController: NSObject {
     /// 切换开机自动运行
     @objc private func toggleLaunchAtLogin() {
         LoginItemManager.shared.toggle()
-        rebuildMenu()
+        if let menu = statusItem.menu { populateMenu(menu) }
     }
 
     /// 退出应用
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension MenuBarController: NSMenuDelegate {
+
+    /// 菜单每次打开前重新填充，保证插件启用态、版本、开机自启勾选等动态信息实时
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        populateMenu(menu)
     }
 }
