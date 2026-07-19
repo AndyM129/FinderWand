@@ -250,7 +250,15 @@
 
 进展记录：
 
-- 2026-07-19：完成设计讨论并闭合，结论写入 `PRD.md`（第 2、3 节）、本文件（本节）与 `DESIGN.md`。尚未开始编码。
+- 2026-07-19：完成设计讨论并闭合，结论写入 `PRD.md`（第 2、3 节）、本文件（本节）与 `DESIGN.md`。
+- 2026-07-19，slice 1 已实现（目录化加载 + 元信息解析 + enabled，待运行验证）：
+  - 新增 `Sources/PluginMetadata.swift`：`PluginMetadata` 结构 + `PluginMetadataStore`。只读文件头文本、受限 `key: value` 子集、读到闭合 `# ---` 即停、绝不执行脚本；`tags` 支持 `[a, b]` 内联数组；未知 key 忽略；按「路径 + mtime」缓存。
+  - 改造 `PluginService.buildNodes`：由「列顶层 `*.sh`」改为「列插件文件夹 → 定位 `main.sh` → 读元信息判 `enabled` → 启用者并行执行」，按文件夹名排序保序；顶层散放 `.sh` 忽略；错误提示项以插件 id 标识。
+  - `run` 新增环境变量 `FW_PLUGIN_DIR`（插件所在目录），便于目录化插件引用自带资源。
+  - 新增目录化示例插件 `~/.config/FinderWand/example/main.sh`（含元信息头 + 全能力演示）。
+  - 构建校验：Debug `BUILD SUCCEEDED`。
+  - 未做（后续 slice）：`iconUrl` / `previewUrl` 相对图解析与消费（依赖尚未存在的分享/管理 UI）、分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
+  - 迁移提醒：现有顶层 `example.sh` / `demo-*.sh` / `hello.sh` 不再加载，需迁入各自文件夹（如 `xxx/main.sh`）。
 
 # 3、待澄清与待决策清单
 

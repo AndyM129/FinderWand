@@ -84,54 +84,68 @@ final class PluginService {
         }
     }
 
-    /// 遍历插件目录执行脚本，合并解析结果
-    /// 说明：脚本之间相互独立，改为并行执行以降低 `menu(for:)` 的同步等待时延，
-    /// 总耗时从「各脚本之和」降到「最慢的单个脚本」；结果按文件名顺序回填，保证菜单顺序稳定。
+    /// 遍历插件目录构建菜单（目录化插件）
+    /// 说明：一个插件 = 一个文件夹，文件夹名即插件 id，入口固定 `main.sh`。
+    /// 只加载「含 main.sh 的插件文件夹」，顶层散放的 `.sh` 忽略；`enabled=false` 的插件跳过。
+    /// 各插件相互独立，改为并行执行以降低 `menu(for:)` 的同步等待时延，结果按文件夹名顺序回填保序。
     private func buildNodes(currentDir: String, selected: [String]) -> [MenuNode] {
         let directory = FWIPC.pluginDirectory
-        let scripts = ((try? FileManager.default.contentsOfDirectory(at: directory,
-                                                                     includingPropertiesForKeys: nil)) ?? [])
-            .filter { $0.pathExtension == "sh" }
+
+        // 列插件目录下的子文件夹，按文件夹名排序
+        let folders = ((try? FileManager.default.contentsOfDirectory(at: directory,
+                                                                     includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        guard !scripts.isEmpty else { return [] }
+        // 定位入口脚本 main.sh，读元信息过滤掉 enabled=false 的插件
+        let plugins: [(entry: URL, id: String)] = folders.compactMap { folder in
+            let entry = folder.appendingPathComponent("main.sh")
+            guard FileManager.default.fileExists(atPath: entry.path) else { return nil }
 
-        // 每个脚本对应一段节点，按下标回填以保序
-        var perScriptNodes = [[MenuNode]](repeating: [], count: scripts.count)
+            let metadata = PluginMetadataStore.metadata(forEntry: entry)
+            guard metadata.enabled else { return nil }
+
+            return (entry, folder.lastPathComponent)
+        }
+
+        guard !plugins.isEmpty else { return [] }
+
+        // 每个插件对应一段节点，按下标回填以保序
+        var perPluginNodes = [[MenuNode]](repeating: [], count: plugins.count)
         let lock = NSLock()
         let group = DispatchGroup()
         let concurrentQueue = DispatchQueue(label: "io.github.andym129.finder-wand.plugin.run",
                                             attributes: .concurrent)
 
-        for (index, script) in scripts.enumerated() {
+        for (index, plugin) in plugins.enumerated() {
             group.enter()
             concurrentQueue.async { [weak self] in
                 defer { group.leave() }
                 guard let self = self else { return }
 
-                let result = self.run(executable: script.path,
+                let result = self.run(executable: plugin.entry.path,
                                       args: [currentDir] + selected,
                                       currentDir: currentDir,
                                       selected: selected)
 
                 var nodes = PluginOutputParser.parse(result.output)
 
-                // 构建期脚本失败/超时：注入一个不可点击的错误提示项
+                // 构建期脚本失败/超时：注入一个不可点击的错误提示项（以插件 id 标识）
                 if result.status != 0 {
                     nodes.append(MenuNode(
-                        title: "⚠️ \(script.lastPathComponent)（执行失败，退出码 \(result.status)）",
+                        title: "⚠️ \(plugin.id)（执行失败，退出码 \(result.status)）",
                         enabled: false))
                 }
 
                 lock.lock()
-                perScriptNodes[index] = nodes
+                perPluginNodes[index] = nodes
                 lock.unlock()
             }
         }
 
         group.wait()
 
-        return perScriptNodes.flatMap { $0 }
+        return perPluginNodes.flatMap { $0 }
     }
 
     /// 把节点树序列化为 JSON，并为可执行叶子登记 actionId
@@ -265,6 +279,8 @@ final class PluginService {
         var environment = ProcessInfo.processInfo.environment
         environment["FW_CURRENT_DIR"] = currentDir
         environment["FW_SELECTED_PATHS"] = selected.joined(separator: "\n")
+        // 插件所在目录，便于目录化插件引用自身携带的资源（如相对图片、辅助脚本）
+        environment["FW_PLUGIN_DIR"] = URL(fileURLWithPath: executable).deletingLastPathComponent().path
         process.environment = environment
 
         if !currentDir.isEmpty {
