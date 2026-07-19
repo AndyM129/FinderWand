@@ -136,6 +136,17 @@ final class MenuBarController: NSObject {
         toggleItem.representedObject = plugin.entryURL
         detail.addItem(toggleItem)
 
+        // 查看说明：插件目录存在 README.md 时才提供
+        let readmeURL = plugin.entryURL.deletingLastPathComponent().appendingPathComponent("README.md")
+        if FileManager.default.fileExists(atPath: readmeURL.path) {
+            let readmeItem = NSMenuItem(title: "查看说明",
+                                        action: #selector(openPluginReadme(_:)),
+                                        keyEquivalent: "")
+            readmeItem.target = self
+            readmeItem.representedObject = readmeURL
+            detail.addItem(readmeItem)
+        }
+
         let openItem = NSMenuItem(title: "在 Finder 中显示",
                                   action: #selector(openPluginFolder(_:)),
                                   keyEquivalent: "")
@@ -210,6 +221,13 @@ final class MenuBarController: NSObject {
         return formatter.string(from: Date())
     }
     @objc private func openPluginFolder(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    /// 打开某插件的 README.md 使用说明
+    @objc private func openPluginReadme(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
 
         NSWorkspace.shared.open(url)

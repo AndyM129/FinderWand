@@ -272,6 +272,11 @@
   - 新增内置模板 `Resources/TemplatePlugin/main.sh`（元信息头骨架 + 示例菜单），`project.yml` 以文件夹引用（`type: folder`）打入 App 资源。
   - 菜单栏新增「新建插件」：将内置 `TemplatePlugin` 拷到插件目录（同名则追加 `yyyyMMddHHmmss` 时间戳后缀），发通知并在 Finder 打开新文件夹。
   - 构建校验：Debug `BUILD SUCCEEDED`，产物内 `Contents/Resources/TemplatePlugin/main.sh` 存在。
+- 2026-07-19，slice 4（说明与元信息分离）已实现：
+  - 约定：插件目录可含 `README.md` 作为该插件使用说明（人读），元信息块仍留 `main.sh` 头部（机读）；通用协议说明属项目级文档，不在每个插件重复。`DESIGN.md` 3.2 已补该约定。
+  - 内置模板拆分：`Resources/TemplatePlugin/main.sh` 瘦身为「元信息 + 一两行提示 + 示例」，新增 `Resources/TemplatePlugin/README.md` 骨架；两者随文件夹引用一并打入 App 资源。
+  - 菜单联动：插件子菜单在其目录存在 `README.md` 时新增「查看说明」打开该文件。
+  - 构建校验：Debug `BUILD SUCCEEDED`，产物 `TemplatePlugin/` 含 `main.sh` 与 `README.md`。
 - 后续 slice（未做）：`iconUrl` / `previewUrl` 相对图解析与消费、分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
 - 2026-07-19，slice 2 修复与增强：
   - 修复：菜单栏菜单是启动时一次性构建的静态菜单，改 `enabled` 后不点刷新不更新。改为持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前 `populateMenu` 重新枚举，插件启用态/版本/开机自启勾选等动态信息实时。
