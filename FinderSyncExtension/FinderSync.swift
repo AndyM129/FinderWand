@@ -25,15 +25,27 @@ class FinderSync: FIFinderSync {
         let selected = (FIFinderSyncController.default().selectedItemURLs() ?? []).map { $0.path }
         let currentDir = currentDirectoryPath()
 
-        guard let items = requestMenuSpec(currentDir: currentDir, selected: selected), !items.isEmpty else {
-            let placeholder = NSMenuItem(title: "Finder Wand", action: nil, keyEquivalent: "")
-            placeholder.isEnabled = false
-            menu.addItem(placeholder)
+        guard let items = requestMenuSpec(currentDir: currentDir, selected: selected) else {
+            // 无响应/超时：主 App 大概率未启动，给出引导文案
+            menu.addItem(placeholderItem(title: "请先启动 Finder Wand"))
+            return menu
+        }
+
+        guard !items.isEmpty else {
+            // 有响应但无菜单项：主 App 在运行，只是当前无插件输出可显示项
+            menu.addItem(placeholderItem(title: "Finder Wand（无可用菜单）"))
             return menu
         }
 
         appendItems(items, to: menu)
         return menu
+    }
+
+    /// 构造不可点击的占位菜单项
+    private func placeholderItem(title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
     }
 
     // MARK: - 请求菜单规格
