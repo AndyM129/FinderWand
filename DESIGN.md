@@ -161,13 +161,16 @@ echo "Git 助手 | sfimage=arrow.triangle.branch"
 - 元信息多语言（如 `title.zh` / `title.en`）暂不做，`key` 命名给它留扩展空间。
 - 是否引入插件级 `order` 字段控制菜单顺序，暂不做，当前按文件夹名排序。
 
-# 4、插件市场按 ID 安装（2026-07-19 定稿）
+# 4、安装插件（2026-07-19 定稿）
 
 ## 4.1、目标与入口
 
-- 从插件市场公开仓库按 id 安装插件到本地插件目录。
-- 市场仓库:`https://github.com/AndyM129/FinderWand-Plugins`,默认分支 `master`,根目录下每个文件夹为一个插件(文件夹名 = id)。
-- 入口:菜单栏「已安装插件」子菜单之后新增「安装指定插件」项。点击弹出 `NSAlert` + 文本输入框:messageText「安装指定插件」、informativeText「请输入插件市场中要安装插件的 ID」、accessoryView 为输入框、按钮「安装」(默认)/「取消」。
+- 支持三种来源安装插件到本地插件目录，统一产出「暂存目录中的插件文件夹」，再按冲突策略写入。
+- 菜单栏「已安装插件」子菜单之后为「安装插件」子菜单，含三项：
+  - 从插件市场安装：输入 id，从市场仓库 `AndyM129/FinderWand-Plugins`(默认分支 `master`)拉取根目录下 `<id>` 文件夹。
+  - 从指定插件仓库安装：输入 `owner/repo` 或完整 GitHub 地址，拉取整仓，落地文件夹名为仓库名。
+  - 从指定目录导入并安装：`NSOpenPanel` 选择本地目录，拷贝到插件目录，落地文件夹名为所选目录名。
+- 输入对话框用 `NSAlert` + `EditableTextField`(支持粘贴，见下)；目录选择用 `NSOpenPanel`。
 
 ## 4.2、拉取方案
 
@@ -197,6 +200,13 @@ echo "Git 助手 | sfimage=arrow.triangle.branch"
 - 下载/解压/写盘在后台线程执行;冲突弹窗与结果提示回主线程。
 - 结果以系统通知反馈(成功/失败/未找到/版本过低),安装成功后刷新「已安装插件」列表。
 - 安全:拉取内容为用户主动安装的插件脚本,沿用现有插件信任模型;写入前完成 id 与合法性校验,备份/覆盖仅作用于该插件自己的文件夹。
+
+## 4.6、指定仓库与本地目录来源
+
+- 从指定仓库：解析输入为 `owner/repo`(兼容完整 URL 与 `.git` 后缀)；调用 GitHub API 取 `default_branch`；下载该分支 tarball，用 `tar --strip-components=1 "<repo>-<branch>"` 解出整仓内容到暂存 `<repoName>` 目录；随后走 4.3 校验。落地文件夹名 = 仓库名(须为安全 slug)。
+- 从本地目录：`NSOpenPanel` 选目录后，用 `ditto <src> <staged/<dirName>>` 拷贝到暂存，再走 4.3 校验。落地文件夹名 = 所选目录名。
+- 三种来源产出的暂存目录一致，之后复用同一套「全新安装 / 备份后整体替换 / 覆盖安装」写入与冲突处理逻辑（4.4）。
+- 粘贴支持：菜单栏 App 无主菜单，`NSAlert` 内普通 `NSTextField` 收不到 Cmd+V，改用 `EditableTextField`(重写 `performKeyEquivalent` 派发剪切/复制/粘贴/全选)。
 
 # 5、文档维护约定
 

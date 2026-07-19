@@ -47,8 +47,14 @@ final class MenuBarController: NSObject {
         // 已安装插件：列出各插件的标题、版本、启用态等信息
         menu.addItem(installedPluginsMenuItem())
 
-        menu.addItem(actionItem(title: "安装市场插件",
-                                action: #selector(installPluginById)))
+        // 安装插件：三种来源
+        let installParent = NSMenuItem(title: "安装插件", action: nil, keyEquivalent: "")
+        let installMenu = NSMenu()
+        installMenu.addItem(actionItem(title: "从插件市场安装", action: #selector(installFromMarket)))
+        installMenu.addItem(actionItem(title: "从指定插件仓库安装", action: #selector(installFromRepo)))
+        installMenu.addItem(actionItem(title: "从指定目录导入并安装", action: #selector(importPluginFromDirectory)))
+        installParent.submenu = installMenu
+        menu.addItem(installParent)
 
         menu.addItem(actionItem(title: "新建自定义插件",
                                 action: #selector(newPluginFromTemplate)))
@@ -224,16 +230,52 @@ final class MenuBarController: NSObject {
         return formatter.string(from: Date())
     }
 
-    // MARK: - 安装指定插件
+    // MARK: - 安装插件
 
-    /// 安装指定插件：输入 id，从插件市场拉取并安装
-    @objc private func installPluginById() {
+    /// 从插件市场安装：输入 id，从市场仓库拉取
+    @objc private func installFromMarket() {
+        guard let id = promptInstallInput(title: "从插件市场安装",
+                                          subtitle: "请输入插件市场中要安装插件的 ID",
+                                          placeholder: "插件 ID") else { return }
+
+        UserNotifier.notify(title: "Finder Wand", body: "正在从插件市场获取「\(id)」…")
+        runFetch { PluginInstaller.fetchFromMarket(id: id) }
+    }
+
+    /// 从指定插件仓库安装：拉取整仓，落地文件夹名为仓库名
+    @objc private func installFromRepo() {
+        guard let input = promptInstallInput(title: "从指定插件仓库安装",
+                                            subtitle: "请输入插件仓库地址（owner/repo 或完整 GitHub 地址）",
+                                            placeholder: "owner/repo") else { return }
+
+        UserNotifier.notify(title: "Finder Wand", body: "正在拉取仓库「\(input)」…")
+        runFetch { PluginInstaller.fetchFromRepo(input: input) }
+    }
+
+    /// 从指定目录导入并安装：选择本地目录拷贝到插件目录
+    @objc private func importPluginFromDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "导入"
+        panel.message = "选择要导入的插件目录"
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+
+        UserNotifier.notify(title: "Finder Wand", body: "正在导入「\(source.lastPathComponent)」…")
+        runFetch { PluginInstaller.importFromDirectory(source) }
+    }
+
+    /// 弹出带输入框的对话框，返回去空白后的非空输入，取消或空返回 nil
+    private func promptInstallInput(title: String, subtitle: String, placeholder: String) -> String? {
         let alert = NSAlert()
-        alert.messageText = "安装市场插件"
-        alert.informativeText = "请输入插件市场中要安装插件的 ID"
+        alert.messageText = title
+        alert.informativeText = subtitle
 
-        let input = EditableTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        input.placeholderString = "插件 ID"
+        let input = EditableTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        input.placeholderString = placeholder
         alert.accessoryView = input
         alert.addButton(withTitle: "安装")
         alert.addButton(withTitle: "取消")
@@ -241,38 +283,27 @@ final class MenuBarController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         alert.window.initialFirstResponder = input
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
 
-        let id = input.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !id.isEmpty else { return }
+        let value = input.stringValue.trimmingCharacters(in: .whitespaces)
+        return value.isEmpty ? nil : value
+    }
 
-        UserNotifier.notify(title: "Finder Wand", body: "正在从插件市场获取「\(id)」…")
-
+    /// 后台执行拉取校验，回主线程处理结果
+    private func runFetch(_ fetch: @escaping () -> PluginInstaller.FetchResult) {
         DispatchQueue.global().async {
-            let result = PluginInstaller.fetchAndValidate(id: id)
-            DispatchQueue.main.async { self.handleFetchResult(result, id: id) }
+            let result = fetch()
+            DispatchQueue.main.async { self.handleFetchResult(result) }
         }
     }
 
     /// 处理拉取与校验结果
-    private func handleFetchResult(_ result: PluginInstaller.FetchResult, id: String) {
+    private func handleFetchResult(_ result: PluginInstaller.FetchResult) {
         switch result {
-        case .invalidId:
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件 ID 不合法")
+        case .failure(let message):
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ \(message)")
 
-        case .notFound:
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件市场中未找到插件「\(id)」")
-
-        case .notAPlugin:
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件「\(id)」缺少 main.sh，非合法插件")
-
-        case .appVersionTooLow(let required):
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件「\(id)」需要 Finder Wand v\(required) 及以上")
-
-        case .failed(let message):
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 安装失败：\(message)")
-
-        case let .success(stagedURL, alreadyInstalled):
+        case let .success(stagedURL, id, alreadyInstalled):
             if alreadyInstalled {
                 promptConflict(stagedURL: stagedURL, id: id)
             } else {

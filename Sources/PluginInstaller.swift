@@ -1,91 +1,100 @@
 import Foundation
 
-/// 插件市场安装器（主 App 侧，非沙箱）
-/// 从公开市场仓库按 id 拉取插件文件夹到本地插件目录，无需鉴权。
+/// 插件安装器（主 App 侧，非沙箱）
+/// 支持三种来源：插件市场按 id、指定 GitHub 仓库、本地目录导入。
+/// 统一产出「暂存目录中的插件文件夹」，再由调用方按「全新安装 / 备份后整体替换 / 覆盖安装」写入插件目录。
 enum PluginInstaller {
 
-    /// 市场仓库信息
-    static let owner = "AndyM129"
-    static let repo = "FinderWand-Plugins"
-    static let branch = "master"
+    /// 插件市场仓库信息
+    static let marketOwner = "AndyM129"
+    static let marketRepo = "FinderWand-Plugins"
+    static let marketBranch = "master"
 
     /// 拉取并校验的结果（尚未写入插件目录）
     enum FetchResult {
-        /// 校验通过，插件已暂存到临时目录 stagedURL（其内为该 <id> 文件夹的内容）
-        case success(stagedURL: URL, alreadyInstalled: Bool)
-        /// id 非法
-        case invalidId
-        /// 市场中未找到该插件
-        case notFound
-        /// 拉取内容缺少 main.sh，非合法插件
-        case notAPlugin
-        /// 当前 App 版本低于插件要求
-        case appVersionTooLow(required: String)
-        /// 其它失败
-        case failed(String)
+        /// 校验通过：插件已暂存到 stagedURL（其内为该插件文件夹内容），落地文件夹名为 id
+        case success(stagedURL: URL, id: String, alreadyInstalled: Bool)
+        /// 失败，附带面向用户的说明
+        case failure(String)
     }
 
-    /// 冲突处理策略
-    enum ConflictStrategy {
-        case backupThenReplace  // 备份现有为 zip，再整体替换
-        case overlay            // 覆盖式：同名覆盖，保留其它文件
-    }
+    // MARK: - 三种来源
 
-    // MARK: - 拉取并校验
-
-    /// 下载市场仓库并解出 <id> 文件夹到临时目录，做合法性与版本校验；不写入插件目录。
-    static func fetchAndValidate(id rawId: String) -> FetchResult {
+    /// 从插件市场按 id 拉取
+    static func fetchFromMarket(id rawId: String) -> FetchResult {
         let id = rawId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isSafeSlug(id) else { return .invalidId }
+        guard isSafeSlug(id) else { return .failure("插件 ID 不合法") }
 
-        let tmpRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("finderwand-install-\(UUID().uuidString)", isDirectory: true)
-        // 暂存目录：tmpRoot/<id>，tar 解压后其内直接是插件文件
-        let stagedURL = tmpRoot.appendingPathComponent(id, isDirectory: true)
+        guard let staging = makeStaging(id: id) else { return .failure("创建临时目录失败") }
 
-        do {
-            try FileManager.default.createDirectory(at: stagedURL, withIntermediateDirectories: true)
-        } catch {
-            return .failed("创建临时目录失败: \(error.localizedDescription)")
+        let tarball = staging.root.appendingPathComponent("src.tar.gz")
+        if let message = downloadTarball(owner: marketOwner, repo: marketRepo, branch: marketBranch, to: tarball) {
+            cleanup(staging.root)
+            return .failure(message)
         }
 
-        // 下载 tarball
-        let tarballFile = tmpRoot.appendingPathComponent("src.tar.gz")
-        if let message = downloadTarball(to: tarballFile) {
-            cleanup(tmpRoot)
-            return .failed(message)
-        }
-
-        // 只解出根目录下的 <id> 文件夹：strip 顶层仓库目录(1) + 子目录本身(1) = 2
-        let member = "\(repo)-\(branch)/\(id)"
+        // 只解出根目录下的 <id> 文件夹：strip 顶层仓库目录(1) + 子目录(1) = 2
+        let member = "\(marketRepo)-\(marketBranch)/\(id)"
         let status = runTool("/usr/bin/tar",
-                             ["-xz", "-f", tarballFile.path, "-C", stagedURL.path,
-                              "--strip-components=2", member])
-
-        // 解压后目录为空 → 市场中无此插件（tar 对不存在的 member 会报错或产出空目录）
-        let contents = (try? FileManager.default.contentsOfDirectory(atPath: stagedURL.path)) ?? []
-        if status != 0 || contents.isEmpty {
-            cleanup(tmpRoot)
-            return .notFound
+                             ["-xz", "-f", tarball.path, "-C", staging.staged.path, "--strip-components=2", member])
+        if status != 0 || isEmptyDir(staging.staged) {
+            cleanup(staging.root)
+            return .failure("插件市场中未找到插件「\(id)」")
         }
 
-        // 合法性：须含 main.sh
-        let entry = stagedURL.appendingPathComponent("main.sh")
-        guard FileManager.default.fileExists(atPath: entry.path) else {
-            cleanup(tmpRoot)
-            return .notAPlugin
+        return validateStaged(staging.staged, id: id)
+    }
+
+    /// 从指定 GitHub 仓库拉取整仓，落地文件夹名为仓库名
+    static func fetchFromRepo(input rawInput: String) -> FetchResult {
+        guard let (owner, repo) = parseRepo(rawInput) else {
+            return .failure("仓库地址不合法，请输入 owner/repo 或完整 GitHub 地址")
         }
 
-        // 版本校验：按 minAppVersion 比较
-        let metadata = PluginMetadataStore.parse(entryURL: entry)
-        if let required = metadata.minAppVersion, !versionAtLeast(AppInfo.shortVersion, required) {
-            cleanup(tmpRoot)
-            return .appVersionTooLow(required: required)
+        let id = repo
+        guard isSafeSlug(id) else { return .failure("仓库名不能作为插件文件夹名（含非法字符）") }
+
+        // 取默认分支
+        let branchResult = fetchDefaultBranch(owner: owner, repo: repo)
+        guard let branch = branchResult.branch else {
+            return .failure(branchResult.error ?? "获取仓库信息失败")
         }
 
-        let dest = AppInfo.pluginDirectory.appendingPathComponent(id, isDirectory: true)
-        let exists = FileManager.default.fileExists(atPath: dest.path)
-        return .success(stagedURL: stagedURL, alreadyInstalled: exists)
+        guard let staging = makeStaging(id: id) else { return .failure("创建临时目录失败") }
+
+        let tarball = staging.root.appendingPathComponent("src.tar.gz")
+        if let message = downloadTarball(owner: owner, repo: repo, branch: branch, to: tarball) {
+            cleanup(staging.root)
+            return .failure(message)
+        }
+
+        // 解出整个顶层目录内容：strip 顶层仓库目录(1)
+        let member = "\(repo)-\(branch)"
+        let status = runTool("/usr/bin/tar",
+                             ["-xz", "-f", tarball.path, "-C", staging.staged.path, "--strip-components=1", member])
+        if status != 0 || isEmptyDir(staging.staged) {
+            cleanup(staging.root)
+            return .failure("拉取仓库内容失败")
+        }
+
+        return validateStaged(staging.staged, id: id)
+    }
+
+    /// 从本地目录导入，落地文件夹名为所选目录名
+    static func importFromDirectory(_ source: URL) -> FetchResult {
+        let id = source.lastPathComponent
+        guard isSafeSlug(id) else { return .failure("目录名不能作为插件文件夹名（含非法字符）") }
+
+        guard let staging = makeStaging(id: id) else { return .failure("创建临时目录失败") }
+
+        // 把所选目录的内容拷进暂存目录
+        let status = runTool("/usr/bin/ditto", [source.path, staging.staged.path])
+        if status != 0 || isEmptyDir(staging.staged) {
+            cleanup(staging.root)
+            return .failure("导入目录失败")
+        }
+
+        return validateStaged(staging.staged, id: id)
     }
 
     // MARK: - 写入插件目录
@@ -109,10 +118,8 @@ enum PluginInstaller {
     @discardableResult
     static func backupThenReplace(stagedURL: URL, id: String) -> Bool {
         let dest = AppInfo.pluginDirectory.appendingPathComponent(id, isDirectory: true)
-        let backupZip = AppInfo.pluginDirectory
-            .appendingPathComponent("\(id)-bak\(timestamp()).zip")
+        let backupZip = AppInfo.pluginDirectory.appendingPathComponent("\(id)-bak\(timestamp()).zip")
 
-        // ditto 压缩现有文件夹（--keepParent 使 zip 内保留 <id> 顶层目录）
         let zipStatus = runTool("/usr/bin/ditto",
                                 ["-c", "-k", "--sequesterRsrc", "--keepParent", dest.path, backupZip.path])
         if zipStatus != 0 {
@@ -136,25 +143,129 @@ enum PluginInstaller {
     @discardableResult
     static func overlayInstall(stagedURL: URL, id: String) -> Bool {
         let dest = AppInfo.pluginDirectory.appendingPathComponent(id, isDirectory: true)
-        // ditto 将 stagedURL 内容合并进 dest：同名覆盖、新增补齐、不删除 dest 已有的其它文件
         let status = runTool("/usr/bin/ditto", [stagedURL.path, dest.path])
         cleanup(stagedURL.deletingLastPathComponent())
         return status == 0
     }
-
-    // MARK: - 辅助
 
     /// 清理临时目录
     static func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
 
-    /// 下载市场仓库 tarball 到指定文件；成功返回 nil，失败返回错误说明。
-    private static func downloadTarball(to file: URL) -> String? {
+    // MARK: - 内部辅助
+
+    /// 校验暂存目录：非空、含 main.sh、满足 minAppVersion；并判断是否已安装
+    private static func validateStaged(_ stagedURL: URL, id: String) -> FetchResult {
+        let entry = stagedURL.appendingPathComponent("main.sh")
+        guard FileManager.default.fileExists(atPath: entry.path) else {
+            cleanup(stagedURL.deletingLastPathComponent())
+            return .failure("该内容缺少 main.sh，非合法插件")
+        }
+
+        let metadata = PluginMetadataStore.parse(entryURL: entry)
+        if let required = metadata.minAppVersion, !versionAtLeast(AppInfo.shortVersion, required) {
+            cleanup(stagedURL.deletingLastPathComponent())
+            return .failure("该插件需要 Finder Wand v\(required) 及以上")
+        }
+
+        let dest = AppInfo.pluginDirectory.appendingPathComponent(id, isDirectory: true)
+        let exists = FileManager.default.fileExists(atPath: dest.path)
+        return .success(stagedURL: stagedURL, id: id, alreadyInstalled: exists)
+    }
+
+    /// 创建临时暂存目录，返回 (根目录, 暂存的 <id> 目录)
+    private static func makeStaging(id: String) -> (root: URL, staged: URL)? {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("finderwand-install-\(UUID().uuidString)", isDirectory: true)
+        let staged = root.appendingPathComponent(id, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: staged, withIntermediateDirectories: true)
+            return (root, staged)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func isEmptyDir(_ url: URL) -> Bool {
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+        return contents.isEmpty
+    }
+
+    /// 解析仓库输入：支持 `owner/repo` 或 `https://github.com/owner/repo(.git)`
+    private static func parseRepo(_ raw: String) -> (owner: String, repo: String)? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return nil }
+
+        // 去掉协议与主机
+        if let range = text.range(of: "github.com/") {
+            text = String(text[range.upperBound...])
+        }
+        // 去掉查询/锚点
+        text = text.components(separatedBy: CharacterSet(charactersIn: "?#")).first ?? text
+
+        let parts = text.split(separator: "/").map(String.init)
+        guard parts.count >= 2 else { return nil }
+
+        let owner = parts[0]
+        var repo = parts[1]
+        if repo.hasSuffix(".git") { repo = String(repo.dropLast(4)) }
+
+        guard !owner.isEmpty, !repo.isEmpty else { return nil }
+
+        return (owner, repo)
+    }
+
+    /// 取仓库默认分支（未鉴权 API）
+    private static func fetchDefaultBranch(owner: String, repo: String) -> (branch: String?, error: String?) {
+        let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)")!
+        var request = URLRequest(url: url)
+        request.setValue("FinderWand", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 30
+
+        var branch: String?
+        var message: String?
+        let semaphore = DispatchSemaphore(value: 0)
+
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            defer { semaphore.signal() }
+
+            if let error = error {
+                message = "获取仓库信息失败: \(error.localizedDescription)"
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                message = "获取仓库信息失败: 无有效响应"
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                message = "获取仓库信息失败(HTTP \(http.statusCode))：请确认仓库存在且为公开"
+                return
+            }
+
+            if let data = data,
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let value = object["default_branch"] as? String {
+                branch = value
+            } else {
+                message = "解析仓库信息失败"
+            }
+        }
+        task.resume()
+        semaphore.wait()
+
+        return (branch, message)
+    }
+
+    /// 下载指定仓库分支的 tarball 到文件；成功返回 nil，失败返回错误说明。
+    private static func downloadTarball(owner: String, repo: String, branch: String, to file: URL) -> String? {
         let url = URL(string: "https://codeload.github.com/\(owner)/\(repo)/tar.gz/refs/heads/\(branch)")!
         var request = URLRequest(url: url)
         request.setValue("FinderWand", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 30
+        request.timeoutInterval = 60
 
         var payload: Data?
         var message: String?
@@ -174,7 +285,7 @@ enum PluginInstaller {
             }
 
             guard (200..<300).contains(http.statusCode) else {
-                message = "下载失败(HTTP \(http.statusCode))：请确认市场仓库已设为公开、分支为 \(branch)"
+                message = "下载失败(HTTP \(http.statusCode))：请确认仓库已公开、分支为 \(branch)"
                 return
             }
 
@@ -196,7 +307,7 @@ enum PluginInstaller {
         return nil
     }
 
-    /// 文件系统安全的插件 id：字母数字与 . _ -，不以点开头，不含 ".." 或路径分隔符
+    /// 文件系统安全 slug：字母数字与 . _ -，不以点开头，不含 ".." 或路径分隔符
     private static func isSafeSlug(_ id: String) -> Bool {
         guard !id.isEmpty, !id.hasPrefix("."), !id.contains(".."), !id.contains("/") else { return false }
 

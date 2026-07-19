@@ -310,6 +310,12 @@
   - 输入框无法粘贴：菜单栏 App 无主菜单，`NSAlert` 里普通 `NSTextField` 收不到 Cmd+V；新增 `EditableTextField`（`performKeyEquivalent` 手动派发剪切/复制/粘贴/全选）。
   - 下载报「The file "master" couldn't be opened」：根因是市场仓库当前仍为 private（匿名访问返回 404，经 `gh api` 确认 `private: true`），并非代码缺陷。下载改用 `URLSession` 并检查 HTTP 状态码，404 时给出明确提示「请确认市场仓库已设为公开、分支为 master」。仓库设为 Public 后即可正常拉取。
   - 构建校验：Debug `BUILD SUCCEEDED`。
+- 2026-07-19，扩展为「安装插件」子菜单（三种来源）：
+  - 菜单由单项「安装市场插件」改为「安装插件」子菜单，含「从插件市场安装」「从指定插件仓库安装」「从指定目录导入并安装」。
+  - `PluginInstaller` 重构为统一 `FetchResult`（`success(stagedURL,id,alreadyInstalled)` / `failure(message)`），新增 `fetchFromRepo(input:)`（解析 owner/repo、取 default_branch、`tar --strip-components=1` 解整仓，落地名为仓库名）与 `importFromDirectory(_:)`（`ditto` 拷贝本地目录，落地名为目录名）；三者复用同一校验与冲突写入逻辑。
+  - `MenuBarController`：三个入口 + 本地目录用 `NSOpenPanel`；结果处理与「备份后安装/覆盖安装/取消」冲突逻辑三源统一。
+  - App 默认版本号提升为 1.0.0（`Base.xcconfig` 与 `project.yml`），便于本地安装要求 1.0.0+ 的插件。
+  - 构建校验：Debug `BUILD SUCCEEDED`；插件市场按 id 安装已联调通过。
 
 # 3、待澄清与待决策清单
 
