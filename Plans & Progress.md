@@ -16,7 +16,7 @@
 ## 1.2、里程碑划分
 
 - 每个里程碑完成后都应可打包为 `.dmg` 并在 GitHub Releases 发布。
-- 里程碑顺序：M0 工程初始化，M1 打包与发布流水线，M2 菜单栏基础功能，M3 Finder 右键菜单核心能力，M4 自动更新与开机自启，M5 插件协议完善，M6 插件元信息、目录化与分享安装。
+- 里程碑顺序：M0 工程初始化，M1 打包与发布流水线，M2 菜单栏基础功能，M3 Finder 右键菜单核心能力，M4 自动更新与开机自启，M5 插件协议完善，M6 插件元信息、目录化与分享安装，M7 插件市场按 ID 安装。
 - 说明：先跑通打包与发布流程（M1），再逐步叠加功能。
 
 # 2、里程碑拆解
@@ -280,6 +280,36 @@
 - 2026-07-19，slice 5（dmg 安装体验）已实现：dmg 卷图标复用 App 的 `AppIcon.icns`（与 App 图标一致）；安装窗口背景改为 HiDPI TIFF（以 `Resources/finderwand-dmg-bg@2x.png` 为权威源，下采样得 @1x，`tiffutil -cathidpicheck` 合成），修复 Retina 上背景被按 1x 缩小、只占窗口一角的问题；打包流程改为「UDRW 挂载 → SetFile 卷图标 + Finder 窗口布局 → 转 UDZO」。经多轮 beta 验证通过。
 - 2026-07-19，已发布 v1.0.0：dev 已合入 master 并推送，打 tag `v1.0.0` 由 CI 构建并发布正式版 Release（`FinderWand-v1.0.0.dmg` + `.sha256`）。M6 的 slice 1-5 完成。
 - 后续（未做，留待后续版本）：`iconUrl` / `previewUrl` 相对图解析与消费、插件分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
+
+## 2.8、M7：插件市场按 ID 安装（状态：已实现，待运行验证）
+
+目标：从插件市场公开仓库 `https://github.com/AndyM129/FinderWand-Plugins`（默认分支 `master`）按 id 安装插件到本地。详细设计见 `DESIGN.md` 第 4 节。
+
+设计结论（2026-07-19，讨论已闭合）：
+
+- 入口：菜单栏「已安装插件」下方新增「安装指定插件」，弹 `NSAlert` + 输入框（标题 / 副标题 / 输入框 / 取消 / 安装）。
+- 拉取：下载 codeload tarball，用 `tar --strip-components=2` 只解出根目录下的 `<id>` 文件夹（无需鉴权，依赖仓库公开）；`id` 先做安全校验，tar 以参数数组调用避免注入。
+- 校验：`id` 为文件系统安全 slug；拉取内容须含 `main.sh`；按 `minAppVersion` 语义化比较，过低则拒绝安装（校验在写盘前）。
+- 冲突（目标已存在）：取消 / 备份后安装（`ditto` 压缩为 `<id>-bak<时间戳>.zip` 放插件目录根，再整体替换）/ 覆盖安装（overlay，同名覆盖、保留其它文件）。
+- 反馈：后台执行，系统通知反馈成功/失败/未找到/版本过低，成功后刷新「已安装插件」。
+
+任务拆解：
+
+- 新增 `Sources/PluginInstaller.swift`：tarball 下载、`tar` 解压取子目录、id 与合法性校验、`minAppVersion` 校验、备份（ditto）、整体替换 / overlay 写入。
+- `MenuBarController`：新增「安装指定插件」菜单项、输入对话框、冲突三选一对话框、结果通知与刷新。
+- 语义化版本比较：复用/抽取版本比较工具（`UpdateChecker` 已有类似逻辑）。
+
+进展记录：
+
+- 2026-07-19，已实现（待运行验证）：
+  - 新增 `Sources/PluginInstaller.swift`：`fetchAndValidate(id:)` 下载 codeload tarball 并用 `tar --strip-components=2` 只解出根目录下 `<id>` 到临时目录，做 id 安全校验、`main.sh` 合法性校验、`minAppVersion` 语义化比较；`installFresh` / `backupThenReplace`（`ditto -c -k --keepParent` 备份为 `<id>-bak<时间戳>.zip` 后整体替换）/ `overlayInstall`（`ditto` 合并覆盖）。tar/ditto 以参数数组调用避免注入。
+  - `MenuBarController` 新增「安装指定插件」菜单项（位于「已安装插件」下方）：`NSAlert` + 输入框收集 id；后台拉取校验，回主线程按结果通知；已存在时弹「备份后安装 / 覆盖安装 / 取消」三选一；写盘在后台执行，成功后系统通知并刷新菜单。
+  - 构建校验：Debug `BUILD SUCCEEDED`。
+  - 前提：市场仓库 `AndyM129/FinderWand-Plugins` 需为 Public；待建好该仓库并放入示例插件后运行验证。
+- 2026-07-19，联调修复：
+  - 输入框无法粘贴：菜单栏 App 无主菜单，`NSAlert` 里普通 `NSTextField` 收不到 Cmd+V；新增 `EditableTextField`（`performKeyEquivalent` 手动派发剪切/复制/粘贴/全选）。
+  - 下载报「The file "master" couldn't be opened」：根因是市场仓库当前仍为 private（匿名访问返回 404，经 `gh api` 确认 `private: true`），并非代码缺陷。下载改用 `URLSession` 并检查 HTTP 状态码，404 时给出明确提示「请确认市场仓库已设为公开、分支为 master」。仓库设为 Public 后即可正常拉取。
+  - 构建校验：Debug `BUILD SUCCEEDED`。
 
 # 3、待澄清与待决策清单
 

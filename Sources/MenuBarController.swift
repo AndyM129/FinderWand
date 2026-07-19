@@ -47,6 +47,9 @@ final class MenuBarController: NSObject {
         // 已安装插件：列出各插件的标题、版本、启用态等信息
         menu.addItem(installedPluginsMenuItem())
 
+        menu.addItem(actionItem(title: "安装市场插件",
+                                action: #selector(installPluginById)))
+
         menu.addItem(actionItem(title: "新建自定义插件",
                                 action: #selector(newPluginFromTemplate)))
 
@@ -220,6 +223,102 @@ final class MenuBarController: NSObject {
         formatter.dateFormat = "yyyyMMddHHmmss"
         return formatter.string(from: Date())
     }
+
+    // MARK: - 安装指定插件
+
+    /// 安装指定插件：输入 id，从插件市场拉取并安装
+    @objc private func installPluginById() {
+        let alert = NSAlert()
+        alert.messageText = "安装市场插件"
+        alert.informativeText = "请输入插件市场中要安装插件的 ID"
+
+        let input = EditableTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        input.placeholderString = "插件 ID"
+        alert.accessoryView = input
+        alert.addButton(withTitle: "安装")
+        alert.addButton(withTitle: "取消")
+
+        NSApp.activate(ignoringOtherApps: true)
+        alert.window.initialFirstResponder = input
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let id = input.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !id.isEmpty else { return }
+
+        UserNotifier.notify(title: "Finder Wand", body: "正在从插件市场获取「\(id)」…")
+
+        DispatchQueue.global().async {
+            let result = PluginInstaller.fetchAndValidate(id: id)
+            DispatchQueue.main.async { self.handleFetchResult(result, id: id) }
+        }
+    }
+
+    /// 处理拉取与校验结果
+    private func handleFetchResult(_ result: PluginInstaller.FetchResult, id: String) {
+        switch result {
+        case .invalidId:
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件 ID 不合法")
+
+        case .notFound:
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件市场中未找到插件「\(id)」")
+
+        case .notAPlugin:
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件「\(id)」缺少 main.sh，非合法插件")
+
+        case .appVersionTooLow(let required):
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 插件「\(id)」需要 Finder Wand v\(required) 及以上")
+
+        case .failed(let message):
+            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 安装失败：\(message)")
+
+        case let .success(stagedURL, alreadyInstalled):
+            if alreadyInstalled {
+                promptConflict(stagedURL: stagedURL, id: id)
+            } else {
+                applyInstall(id: id) { PluginInstaller.installFresh(stagedURL: stagedURL, id: id) }
+            }
+        }
+    }
+
+    /// 插件已存在时的三选一处理
+    private func promptConflict(stagedURL: URL, id: String) {
+        let alert = NSAlert()
+        alert.messageText = "插件「\(id)」已安装"
+        alert.informativeText = "请选择处理方式：备份后安装会先把现有插件压缩备份再整体替换；覆盖安装仅覆盖同名文件、保留其它文件。"
+        alert.addButton(withTitle: "备份后安装")
+        alert.addButton(withTitle: "覆盖安装")
+        alert.addButton(withTitle: "取消")
+
+        NSApp.activate(ignoringOtherApps: true)
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            applyInstall(id: id) { PluginInstaller.backupThenReplace(stagedURL: stagedURL, id: id) }
+
+        case .alertSecondButtonReturn:
+            applyInstall(id: id) { PluginInstaller.overlayInstall(stagedURL: stagedURL, id: id) }
+
+        default:
+            PluginInstaller.cleanup(stagedURL.deletingLastPathComponent())
+        }
+    }
+
+    /// 在后台执行写盘操作，回主线程通知并刷新菜单
+    private func applyInstall(id: String, _ operation: @escaping () -> Bool) {
+        DispatchQueue.global().async {
+            let succeeded = operation()
+            DispatchQueue.main.async {
+                if succeeded {
+                    UserNotifier.notify(title: "Finder Wand", body: "✅ 已安装插件「\(id)」")
+                    if let menu = self.statusItem.menu { self.populateMenu(menu) }
+                } else {
+                    UserNotifier.notify(title: "Finder Wand", body: "⚠️ 安装插件「\(id)」失败")
+                }
+            }
+        }
+    }
+
     @objc private func openPluginFolder(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
 
@@ -324,5 +423,26 @@ extension MenuBarController: NSMenuDelegate {
     /// 菜单每次打开前重新填充，保证插件启用态、版本、开机自启勾选等动态信息实时
     func menuNeedsUpdate(_ menu: NSMenu) {
         populateMenu(menu)
+    }
+}
+
+/// 支持标准编辑快捷键（剪切/复制/粘贴/全选）的输入框
+/// 菜单栏 App（LSUIElement）没有主菜单，`NSAlert` 里的普通 `NSTextField` 收不到 Cmd+V 等快捷键，
+/// 这里通过 `performKeyEquivalent` 手动派发编辑动作以支持粘贴。
+final class EditableTextField: NSTextField {
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let isCommand = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+        if event.type == .keyDown, isCommand {
+            switch event.charactersIgnoringModifiers {
+            case "x": if NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: self) { return true }
+            case "c": if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) { return true }
+            case "v": if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: self) { return true }
+            case "a": if NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: self) { return true }
+            default: break
+            }
+        }
+
+        return super.performKeyEquivalent(with: event)
     }
 }

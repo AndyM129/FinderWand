@@ -4,7 +4,10 @@
 			"path": ".."
 		},
 		{
-			"path": "../../../../../.config/FinderWand"
+			"path": "~/.config/FinderWand"
+		},
+		{
+			"path": "../../FinderWand-Plugins"
 		}
 	],
 	"settings": {}

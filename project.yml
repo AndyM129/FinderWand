@@ -59,7 +59,7 @@ targets:
         SWIFT_VERSION: "5.0"
         SKIP_INSTALL: YES
         # 版本号需与主 App 保持一致（CI 打包时由 xcodebuild 统一覆盖）
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         # 无付费账号：ad-hoc 签名，不强制签名
         CODE_SIGN_STYLE: Manual
