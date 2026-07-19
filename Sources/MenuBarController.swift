@@ -174,6 +174,16 @@ final class MenuBarController: NSObject {
         exportItem.representedObject = plugin.entryURL.deletingLastPathComponent()
         detail.addItem(exportItem)
 
+        detail.addItem(.separator())
+
+        // 卸载（移到废纸篓）
+        let uninstallItem = NSMenuItem(title: "卸载插件…",
+                                       action: #selector(uninstallPlugin(_:)),
+                                       keyEquivalent: "")
+        uninstallItem.target = self
+        uninstallItem.representedObject = plugin.entryURL.deletingLastPathComponent()
+        detail.addItem(uninstallItem)
+
         item.submenu = detail
         return item
     }
@@ -396,6 +406,41 @@ final class MenuBarController: NSObject {
                     NSWorkspace.shared.activateFileViewerSelecting([destination])
                 } else {
                     UserNotifier.notify(title: "Finder Wand", body: "⚠️ 导出插件「\(id)」失败")
+                }
+            }
+        }
+    }
+
+    /// 卸载插件：确认后把插件文件夹移到废纸篓
+    @objc private func uninstallPlugin(_ sender: NSMenuItem) {
+        guard let folder = sender.representedObject as? URL else { return }
+
+        let id = folder.lastPathComponent
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "卸载插件「\(id)」？"
+        alert.informativeText = "将把该插件文件夹移到废纸篓，可从废纸篓恢复。"
+        alert.addButton(withTitle: "卸载")
+        alert.addButton(withTitle: "取消")
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        DispatchQueue.global().async {
+            var succeeded = false
+            do {
+                try FileManager.default.trashItem(at: folder, resultingItemURL: nil)
+                succeeded = true
+            } catch {
+                NSLog("卸载插件失败: \(error.localizedDescription)")
+            }
+
+            DispatchQueue.main.async {
+                if succeeded {
+                    UserNotifier.notify(title: "Finder Wand", body: "🗑️ 已卸载插件「\(id)」")
+                    if let menu = self.statusItem.menu { self.populateMenu(menu) }
+                } else {
+                    UserNotifier.notify(title: "Finder Wand", body: "⚠️ 卸载插件「\(id)」失败")
                 }
             }
         }
