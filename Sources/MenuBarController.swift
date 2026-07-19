@@ -125,6 +125,14 @@ final class MenuBarController: NSObject {
 
         detail.addItem(.separator())
 
+        // 快速切换启用/停用
+        let toggleItem = NSMenuItem(title: metadata.enabled ? "停用该插件" : "启用该插件",
+                                    action: #selector(togglePluginEnabled(_:)),
+                                    keyEquivalent: "")
+        toggleItem.target = self
+        toggleItem.representedObject = plugin.entryURL
+        detail.addItem(toggleItem)
+
         let openItem = NSMenuItem(title: "在 Finder 中显示",
                                   action: #selector(openPluginFolder(_:)),
                                   keyEquivalent: "")
@@ -167,6 +175,16 @@ final class MenuBarController: NSObject {
         guard let url = sender.representedObject as? URL else { return }
 
         NSWorkspace.shared.open(url)
+    }
+
+    /// 快速切换某插件的启用/停用（改写其 main.sh 头部的 enabled 字段）
+    @objc private func togglePluginEnabled(_ sender: NSMenuItem) {
+        guard let entryURL = sender.representedObject as? URL else { return }
+
+        let current = PluginMetadataStore.metadata(forEntry: entryURL).enabled
+        PluginMetadataStore.setEnabled(!current, forEntry: entryURL)
+
+        if let menu = statusItem.menu { populateMenu(menu) }
     }
 
     /// 关于：在浏览器打开项目 GitHub 主页

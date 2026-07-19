@@ -124,6 +124,77 @@ enum PluginMetadataStore {
         return String(rest).trimmingCharacters(in: .whitespaces)
     }
 
+    /// 写入插件的 `enabled` 开关（仅改动元信息块内的 `enabled` 行，尽量保留文件其余内容）
+    /// 处理三种情形：块内已有 enabled 行则改值；块内无该行则在闭合 `# ---` 前插入；无块则在 shebang 后插入最小块。
+    /// 返回是否写入成功。
+    @discardableResult
+    static func setEnabled(_ enabled: Bool, forEntry entryURL: URL) -> Bool {
+        guard let content = try? String(contentsOf: entryURL, encoding: .utf8) else { return false }
+
+        var lines = content.components(separatedBy: "\n")
+        let value = enabled ? "true" : "false"
+
+        var blockStart: Int?
+        var blockEnd: Int?
+        var enabledLineIndex: Int?
+        var insideBlock = false
+
+        for (index, rawLine) in lines.enumerated() {
+            if rawLine.hasPrefix("#!") { continue }
+
+            guard let comment = strippedCommentLine(rawLine) else {
+                if insideBlock { break }
+
+                continue
+            }
+
+            if comment == "---" {
+                if insideBlock {
+                    blockEnd = index
+                    break
+                }
+
+                insideBlock = true
+                blockStart = index
+                continue
+            }
+
+            if insideBlock, let colon = comment.firstIndex(of: ":") {
+                let key = String(comment[..<colon]).trimmingCharacters(in: .whitespaces)
+                if key == "enabled" { enabledLineIndex = index }
+            }
+        }
+
+        if let line = enabledLineIndex {
+            lines[line] = "# enabled: \(value)"
+        } else if let end = blockEnd {
+            lines.insert("# enabled: \(value)", at: end)
+        } else if blockStart == nil {
+            let insertAt = (lines.first?.hasPrefix("#!") ?? false) ? 1 : 0
+            lines.insert(contentsOf: ["# ---", "# enabled: \(value)", "# ---"], at: insertAt)
+        } else {
+            // 块已开始但未找到闭合（异常文件），不冒险改写
+            return false
+        }
+
+        do {
+            try lines.joined(separator: "\n").write(to: entryURL, atomically: true, encoding: .utf8)
+        } catch {
+            NSLog("写入插件 enabled 失败: \(error.localizedDescription)")
+            return false
+        }
+
+        invalidateCache(path: entryURL.path)
+        return true
+    }
+
+    /// 使某个入口脚本的元信息缓存失效
+    private static func invalidateCache(path: String) {
+        lock.lock()
+        cache.removeValue(forKey: path)
+        lock.unlock()
+    }
+
     /// 解析一行 `key: value` 并写入元信息
     private static func apply(commentLine: String, to metadata: inout PluginMetadata) {
         guard let colon = commentLine.firstIndex(of: ":") else { return }

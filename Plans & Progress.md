@@ -152,6 +152,10 @@
   - 动作执行（`Sources/PluginService.swift`）：可执行叶子在构建时登记 `actionId`（含点击上下文），点击时扩展用菜单项 `tag` 携带 `actionId` 通知主 App，主 App 执行 `bash`（带 `FW_CURRENT_DIR`/`FW_SELECTED_PATHS` 与 argv）或打开 `href`，结果写 `run.log`。
   - 每脚本执行超时 1.5s，避免卡 Finder。
   - 示例插件 `~/.config/FinderWand/hello.sh` 已改写为多级 + 条件显示示例。
+  - 构建校验：Debug `BUILD SUCCEEDED`。
+- 2026-07-19，slice 2 修复与增强：
+  - 修复：菜单栏菜单是启动时一次性构建的静态菜单，改 `enabled` 后不点刷新不更新。改为持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前 `populateMenu` 重新枚举，插件启用态/版本/开机自启勾选等动态信息实时。
+  - 增强：插件子菜单新增「停用该插件 / 启用该插件」快速开关，改写 `main.sh` 头部 `enabled` 字段（`PluginMetadataStore.setEnabled` 仅改动块内 enabled 行：已有则改值、块内无则在闭合前插入、无块则在 shebang 后插入最小块；写入后失效该文件缓存）。
   - 构建校验：Debug `BUILD SUCCEEDED`。待用户运行验证：右键出现「Finder Wand 示例」及其子菜单，选中文件时出现「对所选执行」，点击子项执行成功（`run.log` 记录、终端/浏览器/默认程序被正确调起）。
   - 风险待观察：`NSMenuItem.tag` 是否跨 Finder Sync XPC 稳定存活（representedObject 已证实不存活）；若 tag 也丢失需改用其他标识。
   - slice 2 已验证通过（2026-07-18）：多级子菜单正常显示，点击子项能执行。确认 `NSMenuItem.tag` 可跨 Finder Sync XPC 存活。M3 核心能力（任意路径动态多级菜单 + 条件显示 + 脚本执行）完成。
@@ -251,18 +255,23 @@
 进展记录：
 
 - 2026-07-19：完成设计讨论并闭合，结论写入 `PRD.md`（第 2、3 节）、本文件（本节）与 `DESIGN.md`。
-- 2026-07-19，slice 1 已实现（目录化加载 + 元信息解析 + enabled，待运行验证）：
+- 2026-07-19，slice 1（目录化加载 + 元信息解析 + enabled）已实现并验证通过：
   - 新增 `Sources/PluginMetadata.swift`：`PluginMetadata` 结构 + `PluginMetadataStore`。只读文件头文本、受限 `key: value` 子集、读到闭合 `# ---` 即停、绝不执行脚本；`tags` 支持 `[a, b]` 内联数组；未知 key 忽略；按「路径 + mtime」缓存。
   - 改造 `PluginService.buildNodes`：由「列顶层 `*.sh`」改为「列插件文件夹 → 定位 `main.sh` → 读元信息判 `enabled` → 启用者并行执行」，按文件夹名排序保序；顶层散放 `.sh` 忽略；错误提示项以插件 id 标识。
   - `run` 新增环境变量 `FW_PLUGIN_DIR`（插件所在目录），便于目录化插件引用自带资源。
   - 新增目录化示例插件 `~/.config/FinderWand/example/main.sh`（含元信息头 + 全能力演示）。
-  - 构建校验：Debug `BUILD SUCCEEDED`。
-  - 未做（后续 slice）：`iconUrl` / `previewUrl` 相对图解析与消费（依赖尚未存在的分享/管理 UI）、分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
   - 迁移提醒：现有顶层 `example.sh` / `demo-*.sh` / `hello.sh` 不再加载，需迁入各自文件夹（如 `xxx/main.sh`）。
-- 2026-07-19，slice 1 已验证通过：本地编译运行，目录化加载与 `enabled` 开关均有效。
-- 2026-07-19，slice 2 已实现（菜单栏「已安装插件」信息入口，待运行验证）：
+  - 验证：本地编译运行，目录化加载与 `enabled` 开关均有效。
+- 2026-07-19，slice 2（菜单栏「已安装插件」信息入口 + 启用开关）已实现：
   - `PluginService` 抽出 `InstalledPlugin` 结构与 `installedPlugins()` 枚举方法（含禁用者），`buildNodes` 复用它并过滤启用项。
-  - `MenuBarController` 新增「已安装插件（N）」子菜单：每个插件显示标题（勾选态反映启用/停用），其子菜单展示 ID、版本、作者、标签、状态、简介，并提供「在 Finder 中显示」打开插件文件夹（菜单栏非 Finder Sync，`representedObject` 可正常使用）。「刷新」会重新枚举。
+  - `MenuBarController` 新增「已安装插件（N）」子菜单：每个插件显示标题（勾选态反映启用/停用），其子菜单展示 ID、版本、作者、标签、状态、简介，并提供「在 Finder 中显示」打开插件文件夹（菜单栏非 Finder Sync，`representedObject` 可正常使用）。
+  - 修复：菜单栏原为启动时一次性构建的静态菜单，改 `enabled` 后不点刷新不更新；改为持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前 `populateMenu` 重新枚举，插件启用态/版本/开机自启勾选等动态信息实时。
+  - 增强：插件子菜单新增「停用该插件 / 启用该插件」快速开关，改写 `main.sh` 头部 `enabled` 字段（`PluginMetadataStore.setEnabled`：块内有则改值、无则在闭合前插入、无块则在 shebang 后插最小块；写入后失效该文件缓存）。
+  - 构建校验：Debug `BUILD SUCCEEDED`。
+- 后续 slice（未做）：`iconUrl` / `previewUrl` 相对图解析与消费、分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
+- 2026-07-19，slice 2 修复与增强：
+  - 修复：菜单栏菜单是启动时一次性构建的静态菜单，改 `enabled` 后不点刷新不更新。改为持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前 `populateMenu` 重新枚举，插件启用态/版本/开机自启勾选等动态信息实时。
+  - 增强：插件子菜单新增「停用该插件 / 启用该插件」快速开关，改写 `main.sh` 头部 `enabled` 字段（`PluginMetadataStore.setEnabled` 仅改动块内 enabled 行：已有则改值、块内无则在闭合前插入、无块则在 shebang 后插入最小块；写入后失效该文件缓存）。
   - 构建校验：Debug `BUILD SUCCEEDED`。
 
 # 3、待澄清与待决策清单
