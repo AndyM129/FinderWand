@@ -259,6 +259,11 @@
   - 构建校验：Debug `BUILD SUCCEEDED`。
   - 未做（后续 slice）：`iconUrl` / `previewUrl` 相对图解析与消费（依赖尚未存在的分享/管理 UI）、分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
   - 迁移提醒：现有顶层 `example.sh` / `demo-*.sh` / `hello.sh` 不再加载，需迁入各自文件夹（如 `xxx/main.sh`）。
+- 2026-07-19，slice 1 已验证通过：本地编译运行，目录化加载与 `enabled` 开关均有效。
+- 2026-07-19，slice 2 已实现（菜单栏「已安装插件」信息入口，待运行验证）：
+  - `PluginService` 抽出 `InstalledPlugin` 结构与 `installedPlugins()` 枚举方法（含禁用者），`buildNodes` 复用它并过滤启用项。
+  - `MenuBarController` 新增「已安装插件（N）」子菜单：每个插件显示标题（勾选态反映启用/停用），其子菜单展示 ID、版本、作者、标签、状态、简介，并提供「在 Finder 中显示」打开插件文件夹（菜单栏非 Finder Sync，`representedObject` 可正常使用）。「刷新」会重新枚举。
+  - 构建校验：Debug `BUILD SUCCEEDED`。
 
 # 3、待澄清与待决策清单
 

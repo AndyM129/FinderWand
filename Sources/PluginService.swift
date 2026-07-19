@@ -84,29 +84,46 @@ final class PluginService {
         }
     }
 
-    /// 遍历插件目录构建菜单（目录化插件）
-    /// 说明：一个插件 = 一个文件夹，文件夹名即插件 id，入口固定 `main.sh`。
-    /// 只加载「含 main.sh 的插件文件夹」，顶层散放的 `.sh` 忽略；`enabled=false` 的插件跳过。
-    /// 各插件相互独立，改为并行执行以降低 `menu(for:)` 的同步等待时延，结果按文件夹名顺序回填保序。
-    private func buildNodes(currentDir: String, selected: [String]) -> [MenuNode] {
+    // MARK: - 插件枚举
+
+    /// 已安装插件（目录化）
+    struct InstalledPlugin {
+        /// 插件 id（即文件夹名）
+        let id: String
+        /// 入口脚本 main.sh
+        let entryURL: URL
+        /// 插件元信息
+        let metadata: PluginMetadata
+    }
+
+    /// 枚举已安装插件：列插件目录下含 main.sh 的子文件夹，按文件夹名排序，读元信息（含禁用者）
+    func installedPlugins() -> [InstalledPlugin] {
         let directory = FWIPC.pluginDirectory
 
-        // 列插件目录下的子文件夹，按文件夹名排序
         let folders = ((try? FileManager.default.contentsOfDirectory(at: directory,
                                                                      includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        // 定位入口脚本 main.sh，读元信息过滤掉 enabled=false 的插件
-        let plugins: [(entry: URL, id: String)] = folders.compactMap { folder in
+        return folders.compactMap { folder in
             let entry = folder.appendingPathComponent("main.sh")
             guard FileManager.default.fileExists(atPath: entry.path) else { return nil }
 
-            let metadata = PluginMetadataStore.metadata(forEntry: entry)
-            guard metadata.enabled else { return nil }
-
-            return (entry, folder.lastPathComponent)
+            return InstalledPlugin(id: folder.lastPathComponent,
+                                   entryURL: entry,
+                                   metadata: PluginMetadataStore.metadata(forEntry: entry))
         }
+    }
+
+    // MARK: - 构建菜单
+
+    /// 遍历插件目录构建菜单（目录化插件）
+    /// 说明：一个插件 = 一个文件夹，文件夹名即插件 id，入口固定 `main.sh`。
+    /// 只加载「含 main.sh 的插件文件夹」，顶层散放的 `.sh` 忽略；`enabled=false` 的插件跳过。
+    /// 各插件相互独立，改为并行执行以降低 `menu(for:)` 的同步等待时延，结果按文件夹名顺序回填保序。
+    private func buildNodes(currentDir: String, selected: [String]) -> [MenuNode] {
+        // 仅加载启用的插件
+        let plugins = installedPlugins().filter { $0.metadata.enabled }
 
         guard !plugins.isEmpty else { return [] }
 
@@ -123,7 +140,7 @@ final class PluginService {
                 defer { group.leave() }
                 guard let self = self else { return }
 
-                let result = self.run(executable: plugin.entry.path,
+                let result = self.run(executable: plugin.entryURL.path,
                                       args: [currentDir] + selected,
                                       currentDir: currentDir,
                                       selected: selected)
