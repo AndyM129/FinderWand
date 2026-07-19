@@ -111,10 +111,85 @@ mkdir -p "$STAGING"
 cp -R "$APP" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
 
+# 卷图标：复用 App 编译产出的 AppIcon.icns，保证 dmg 图标与 App 图标一致
+VOL_ICON_SRC="$APP/Contents/Resources/AppIcon.icns"
+if [[ -f "$VOL_ICON_SRC" ]]; then
+  cp "$VOL_ICON_SRC" "$STAGING/.VolumeIcon.icns"
+else
+  echo "警告: 未找到 $VOL_ICON_SRC，dmg 卷图标将使用默认图标"
+fi
+
+# 背景图：放入隐藏目录 .background，供 Finder 窗口作为背景
+BG_SRC="$ROOT/Resources/finderwand-dmg-bg.png"
+HAS_BG=0
+if [[ -f "$BG_SRC" ]]; then
+  mkdir -p "$STAGING/.background"
+  cp "$BG_SRC" "$STAGING/.background/bg.png"
+  HAS_BG=1
+else
+  echo "警告: 未找到背景图 $BG_SRC，dmg 将不设置背景"
+fi
+
 mkdir -p "$DIST"
 DMG="$DIST/FinderWand-${LABEL}.dmg"
 rm -f "$DMG"
-hdiutil create -volname "$APP_NAME" -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+
+# 先做可读写 dmg，挂载后设置卷图标与窗口布局，再转成压缩只读 dmg
+RW_DMG="$DIST/rw-${LABEL}.dmg"
+rm -f "$RW_DMG"
+hdiutil create -volname "$APP_NAME" -srcfolder "$STAGING" -fs HFS+ -format UDRW -ov "$RW_DMG"
+
+MOUNT_DIR="/Volumes/$APP_NAME"
+hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true
+hdiutil attach "$RW_DMG" -mountpoint "$MOUNT_DIR" -nobrowse -noverify -noautoopen
+
+# 设置卷图标属性（需要 SetFile；失败不阻断打包）
+if [[ -f "$MOUNT_DIR/.VolumeIcon.icns" ]]; then
+  xcrun SetFile -a C "$MOUNT_DIR" 2>/dev/null || echo "警告: 设置卷图标属性失败（SetFile）"
+fi
+
+# 通过 Finder 设置窗口大小、背景图与图标位置（依赖 GUI 会话，失败不阻断打包）
+if [[ "$HAS_BG" == "1" ]]; then
+  BG_W="$(sips -g pixelWidth "$BG_SRC" 2>/dev/null | awk '/pixelWidth/{print $2}')"
+  BG_H="$(sips -g pixelHeight "$BG_SRC" 2>/dev/null | awk '/pixelHeight/{print $2}')"
+  BG_W="${BG_W:-640}"
+  BG_H="${BG_H:-400}"
+
+  APP_X=$(( BG_W * 28 / 100 ))
+  APP_Y=$(( BG_H * 52 / 100 ))
+  ALIAS_X=$(( BG_W * 72 / 100 ))
+  ALIAS_Y=$(( BG_H * 52 / 100 ))
+  WIN_R=$(( 100 + BG_W ))
+  WIN_B=$(( 100 + BG_H ))
+
+  osascript <<EOF 2>/dev/null || echo "警告: Finder 窗口布局设置失败（可能无 GUI 会话）"
+tell application "Finder"
+  tell disk "$APP_NAME"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {100, 100, $WIN_R, $WIN_B}
+    set theViewOptions to the icon view options of container window
+    set arrangement of theViewOptions to not arranged
+    set icon size of theViewOptions to 128
+    set background picture of theViewOptions to file ".background:bg.png"
+    set position of item "$APP_NAME.app" of container window to {$APP_X, $APP_Y}
+    set position of item "Applications" of container window to {$ALIAS_X, $ALIAS_Y}
+    update without registering applications
+    delay 1
+    close
+  end tell
+end tell
+EOF
+fi
+
+sync
+hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || hdiutil detach "$MOUNT_DIR" -force >/dev/null 2>&1 || true
+
+# 转成压缩只读 dmg
+hdiutil convert "$RW_DMG" -format UDZO -o "$DMG"
+rm -f "$RW_DMG"
 shasum -a 256 "$DMG" > "$DMG.sha256"
 
 rm -rf "$STAGING"

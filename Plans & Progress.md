@@ -301,7 +301,7 @@
 
 - 用途：编译 Release 通用二进制并打包 `.dmg`（本地/CI 通用）。
 - 用法：`CHANNEL=stable MARKETING_VERSION=0.1.8 BUILD_NUMBER=N LABEL=v0.1.8 ./scripts/package-dmg.sh`；`CHANNEL=beta` 出测试版。
-- 说明：注入渠道/commit/时间戳到 Info.plist；从内到外 ad-hoc 重签（先带 entitlements 签扩展，再签 App，禁用 `--deep`）；`hdiutil` 产出 `.dmg` 与 `.sha256`。本机因 TCC 限制 `hdiutil` 可能失败，实际出包以 CI 为准。
+- 说明：注入渠道/commit/时间戳到 Info.plist；从内到外 ad-hoc 重签（先带 entitlements 签扩展，再签 App，禁用 `--deep`）；`hdiutil` 产出 `.dmg` 与 `.sha256`。dmg 卷图标复用 App 的 `AppIcon.icns`（与 App 图标一致），并将 `Resources/finderwand-dmg-bg.png` 设为安装窗口背景（先做 UDRW 挂载设置卷图标属性与 Finder 窗口布局，再转 UDZO；窗口布局依赖 GUI 会话，本机因 TCC 限制 `hdiutil` 可能失败，实际出包以 CI 为准）。
 
 ## 4.3、uninstall.sh
 
