@@ -181,8 +181,18 @@ final class MenuBarController: NSObject {
     @objc private func togglePluginEnabled(_ sender: NSMenuItem) {
         guard let entryURL = sender.representedObject as? URL else { return }
 
-        let current = PluginMetadataStore.metadata(forEntry: entryURL).enabled
-        PluginMetadataStore.setEnabled(!current, forEntry: entryURL)
+        let metadata = PluginMetadataStore.metadata(forEntry: entryURL)
+        let name = metadata.title ?? entryURL.deletingLastPathComponent().lastPathComponent
+        let target = !metadata.enabled
+
+        let succeeded = PluginMetadataStore.setEnabled(target, forEntry: entryURL)
+        if succeeded {
+            UserNotifier.notify(title: "Finder Wand",
+                                body: "\(target ? "🟢 已启用" : "🔴 已停用")插件「\(name)」")
+        } else {
+            UserNotifier.notify(title: "Finder Wand",
+                                body: "⚠️ 切换插件「\(name)」失败，请检查文件权限")
+        }
 
         if let menu = statusItem.menu { populateMenu(menu) }
     }
