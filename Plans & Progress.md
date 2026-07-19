@@ -284,6 +284,7 @@
 - 2026-07-19，插件卸载已实现：插件子菜单新增「卸载插件…」，确认弹窗后 `FileManager.trashItem` 将插件文件夹移到废纸篓（可恢复），完成后通知并刷新菜单。Debug `BUILD SUCCEEDED`。
 - 2026-07-19，插件详情窗口 + `previewUrl` 消费已实现：新增 `Sources/PluginDetailWindow.swift`，插件子菜单新增「查看详情」，弹出窗口展示图标、标题、版本、作者、标签、简介与 `previewUrl` 预览图，并提供作者主页/查看说明/在 Finder 中显示入口；图标与预览图异步加载（网络图等待下载）。`PluginIconLoader` 拆分为同步 `menuIcon` 与异步 `resolveImage`，圆角 `rounded(_:side:)` 通用化。Debug `BUILD SUCCEEDED`。
 - M6/M7 规划内的能力（含 `iconUrl` / `previewUrl` 消费、分享导出、卸载）均已实现，暂无待办。
+- 2026-07-19，「新建插件」改为市场优先：优先走 `fetchFromMarket("TemplatePlugin")` 拉取最新模板，失败回退到内置 `Resources/TemplatePlugin`；两种来源统一放入插件目录（同名加时间戳后缀）。Debug `BUILD SUCCEEDED`。
 
 ## 2.8、M7：插件市场按 ID 安装（状态：已实现，待运行验证）
 

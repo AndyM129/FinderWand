@@ -227,29 +227,59 @@ final class MenuBarController: NSObject {
         NSWorkspace.shared.open(directory)
     }
 
-    /// 新建插件：将 App 内置的模板文件夹拷贝到插件目录（同名则加时间戳后缀），通知并打开该文件夹
+    /// 新建插件：优先从插件市场拉取最新 TemplatePlugin，失败则回退到内置模板
     @objc private func newPluginFromTemplate() {
+        UserNotifier.notify(title: "Finder Wand", body: "正在获取最新模板…")
+
+        DispatchQueue.global().async {
+            let result = PluginInstaller.fetchFromMarket(id: "TemplatePlugin")
+            DispatchQueue.main.async {
+                switch result {
+                case let .success(stagedURL, _, _):
+                    self.placeNewPlugin(source: stagedURL, isTemp: true)
+
+                case .failure:
+                    self.newPluginFromBundledTemplate()
+                }
+            }
+        }
+    }
+
+    /// 使用 App 内置模板新建插件（市场拉取失败时的回退）
+    private func newPluginFromBundledTemplate() {
         guard let template = Bundle.main.url(forResource: "TemplatePlugin", withExtension: nil) else {
             UserNotifier.notify(title: "Finder Wand", body: "⚠️ 未找到内置插件模板")
             return
         }
 
+        placeNewPlugin(source: template, isTemp: false)
+    }
+
+    /// 把模板文件夹放入插件目录（同名则加时间戳后缀），通知并打开
+    /// isTemp 为真时来源是临时暂存目录，用移动并清理；否则用拷贝
+    private func placeNewPlugin(source: URL, isTemp: Bool) {
         let directory = AppInfo.pluginDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        // 目标文件夹：与模板同名，若已存在则追加时间戳后缀
-        let baseName = template.lastPathComponent
+        let baseName = source.lastPathComponent
         var destination = directory.appendingPathComponent(baseName, isDirectory: true)
         if FileManager.default.fileExists(atPath: destination.path) {
             destination = directory.appendingPathComponent("\(baseName)-\(timestampSuffix())", isDirectory: true)
         }
 
         do {
-            try FileManager.default.copyItem(at: template, to: destination)
+            if isTemp {
+                try FileManager.default.moveItem(at: source, to: destination)
+            } else {
+                try FileManager.default.copyItem(at: source, to: destination)
+            }
         } catch {
             UserNotifier.notify(title: "Finder Wand", body: "⚠️ 新建插件失败：\(error.localizedDescription)")
+            if isTemp { PluginInstaller.cleanup(source.deletingLastPathComponent()) }
             return
         }
+
+        if isTemp { PluginInstaller.cleanup(source.deletingLastPathComponent()) }
 
         UserNotifier.notify(title: "Finder Wand", body: "✨ 已新建插件「\(destination.lastPathComponent)」")
         NSWorkspace.shared.open(destination)

@@ -150,8 +150,8 @@ echo "Git 助手 | sfimage=arrow.triangle.branch"
 
 ## 3.12、插件管理与新建（菜单栏，已实现）
 
-- 「已安装插件」子菜单：枚举插件文件夹并展示每个插件的标题、id、版本、作者、标签、状态、简介；提供「启用/停用」（改写 `main.sh` 头部 `enabled`）、「查看说明」（存在 `README.md` 时打开）、「在 Finder 中显示」、「导出为 zip…」（`NSSavePanel` 选位置，`ditto -c -k --keepParent` 打包该插件文件夹，用于分享）、「卸载插件…」（确认后 `FileManager.trashItem` 移到废纸篓，可恢复）。菜单项图标取 `iconUrl`（文件夹内相对图或网络图，网络图磁盘缓存、后台下载），缩放 16pt 并加圆角（约 22.37% 边长，参考 Apple 图标规范）。
-- 「新建插件」：将 App 内置模板文件夹（`Resources/TemplatePlugin`，以文件夹引用打入 App 资源）拷贝到插件目录，同名则加时间戳后缀，随后通知并打开该文件夹。
+- 「已安装插件」子菜单：枚举插件文件夹并展示每个插件的标题、id、版本、作者、标签、状态、简介；提供「查看详情」（弹出详情窗口：图标、标题、版本、作者、标签、简介、`previewUrl` 预览图，及作者主页/说明/定位入口）、「启用/停用」（改写 `main.sh` 头部 `enabled`）、「查看说明」（存在 `README.md` 时打开）、「在 Finder 中显示」、「导出为 zip…」（`NSSavePanel` 选位置，`ditto -c -k --keepParent` 打包该插件文件夹，用于分享）、「卸载插件…」（确认后 `FileManager.trashItem` 移到废纸篓，可恢复）。菜单项图标取 `iconUrl`（文件夹内相对图或网络图，网络图磁盘缓存、后台下载），缩放 16pt 并加圆角（约 22.37% 边长，参考 Apple 图标规范）。
+- 「新建插件」：优先从插件市场拉取最新 `TemplatePlugin`（`fetchFromMarket`），失败则回退到 App 内置模板（`Resources/TemplatePlugin`，以文件夹引用打入 App 资源）；放入插件目录时同名加时间戳后缀，随后通知并打开该文件夹。
 - 菜单栏菜单采用持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前重新枚举，保证启用态等动态信息实时。
 - 切换启用态、新建插件等操作以系统通知反馈（`UNUserNotificationCenter`，前台通过 willPresent 强制横幅展示）。
 

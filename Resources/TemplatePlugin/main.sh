@@ -1,16 +1,16 @@
 #!/bin/bash
 # ---
 # schema: 1
-# id: my-plugin
-# title: 我的插件
+# id: TemplatePlugin
+# title: 插件模板
 # description: 在这里填写插件简介
 # iconUrl: icon.png
 # previewUrl: preview.png
-# tags: [demo]
+# tags: [Template]
 # version: 1.0.0
-# author: your-name
-# authorUrl: https://github.com/your-name
-# minAppVersion: 0.1.9
+# author: AndyM129
+# authorUrl: https://github.com/AndyM129
+# minAppVersion: 1.0.0
 # enabled: true
 # ---
 #
