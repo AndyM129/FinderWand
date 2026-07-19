@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// 菜单栏控制器
 /// 负责创建并管理菜单栏状态项（NSStatusItem）及其下拉菜单与菜单动作。
@@ -164,6 +165,14 @@ final class MenuBarController: NSObject {
         openItem.target = self
         openItem.representedObject = plugin.entryURL.deletingLastPathComponent()
         detail.addItem(openItem)
+
+        // 导出为 zip（分享）
+        let exportItem = NSMenuItem(title: "导出为 zip…",
+                                    action: #selector(exportPlugin(_:)),
+                                    keyEquivalent: "")
+        exportItem.target = self
+        exportItem.representedObject = plugin.entryURL.deletingLastPathComponent()
+        detail.addItem(exportItem)
 
         item.submenu = detail
         return item
@@ -363,6 +372,33 @@ final class MenuBarController: NSObject {
         guard let url = sender.representedObject as? URL else { return }
 
         NSWorkspace.shared.open(url)
+    }
+
+    /// 导出插件为 zip 到用户选择的位置（分享）
+    @objc private func exportPlugin(_ sender: NSMenuItem) {
+        guard let folder = sender.representedObject as? URL else { return }
+
+        let id = folder.lastPathComponent
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(id).zip"
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.zip]
+        panel.message = "导出插件「\(id)」为 zip"
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+
+        DispatchQueue.global().async {
+            let succeeded = PluginInstaller.exportZip(folder: folder, to: destination)
+            DispatchQueue.main.async {
+                if succeeded {
+                    UserNotifier.notify(title: "Finder Wand", body: "✅ 已导出插件「\(id)」")
+                    NSWorkspace.shared.activateFileViewerSelecting([destination])
+                } else {
+                    UserNotifier.notify(title: "Finder Wand", body: "⚠️ 导出插件「\(id)」失败")
+                }
+            }
+        }
     }
 
     /// 快速切换某插件的启用/停用（改写其 main.sh 头部的 enabled 字段）

@@ -153,6 +153,15 @@ enum PluginInstaller {
         try? FileManager.default.removeItem(at: url)
     }
 
+    /// 导出插件文件夹为 zip（--keepParent 使 zip 内保留插件顶层目录）
+    @discardableResult
+    static func exportZip(folder: URL, to destination: URL) -> Bool {
+        try? FileManager.default.removeItem(at: destination)
+        let status = runTool("/usr/bin/ditto",
+                             ["-c", "-k", "--sequesterRsrc", "--keepParent", folder.path, destination.path])
+        return status == 0
+    }
+
     // MARK: - 内部辅助
 
     /// 校验暂存目录：非空、含 main.sh、满足 minAppVersion；并判断是否已安装

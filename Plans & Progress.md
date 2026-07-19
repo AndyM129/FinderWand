@@ -279,8 +279,9 @@
   - 构建校验：Debug `BUILD SUCCEEDED`，产物 `TemplatePlugin/` 含 `main.sh` 与 `README.md`。
 - 2026-07-19，slice 5（dmg 安装体验）已实现：dmg 卷图标复用 App 的 `AppIcon.icns`（与 App 图标一致）；安装窗口背景改为 HiDPI TIFF（以 `Resources/finderwand-dmg-bg@2x.png` 为权威源，下采样得 @1x，`tiffutil -cathidpicheck` 合成），修复 Retina 上背景被按 1x 缩小、只占窗口一角的问题；打包流程改为「UDRW 挂载 → SetFile 卷图标 + Finder 窗口布局 → 转 UDZO」。经多轮 beta 验证通过。
 - 2026-07-19，已发布 v1.0.0：dev 已合入 master 并推送，打 tag `v1.0.0` 由 CI 构建并发布正式版 Release（`FinderWand-v1.0.0.dmg` + `.sha256`）。M6 的 slice 1-5 完成。
-- 2026-07-19，已消费 `iconUrl`：新增 `Sources/PluginIconLoader.swift`，「已安装插件」菜单项显示插件图标（文件夹内相对图同步加载；网络图磁盘缓存，未命中则后台下载、下次打开显示，避免卡住菜单构建）。含相对路径防穿越校验。Debug `BUILD SUCCEEDED`。
-- 后续（未做，留待后续版本）：`previewUrl` 预览图消费（需插件详情/安装预览 UI）、插件分享/导出、一键安装与 `id` 落盘安全校验（安装已实现）、`minAppVersion` 安装校验（已实现）。
+- 2026-07-19，已消费 `iconUrl`：新增 `Sources/PluginIconLoader.swift`，「已安装插件」菜单项显示插件图标（文件夹内相对图同步加载；网络图磁盘缓存，未命中则后台下载、下次打开显示，避免卡住菜单构建）。含相对路径防穿越校验。图标缩放到 16pt 并加圆角（半径取边长 22.37%，参考 Apple macOS 图标规范；用 `drawingHandler` 版本随分辨率重绘，Retina 清晰）。Debug `BUILD SUCCEEDED`。
+- 2026-07-19，插件分享/导出已实现：插件子菜单新增「导出为 zip…」，`NSSavePanel` 选位置后 `PluginInstaller.exportZip`（`ditto -c -k --keepParent`）打包该插件文件夹为 `<id>.zip`，完成后通知并在 Finder 中选中。Debug `BUILD SUCCEEDED`。
+- 后续（未做，留待后续版本）：`previewUrl` 预览图消费（需插件详情/安装预览 UI）、已安装插件「卸载」。
 
 ## 2.8、M7：插件市场按 ID 安装（状态：已实现，待运行验证）
 
