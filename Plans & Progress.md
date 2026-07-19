@@ -285,6 +285,7 @@
 - 2026-07-19，插件详情窗口 + `previewUrl` 消费已实现：新增 `Sources/PluginDetailWindow.swift`，插件子菜单新增「查看详情」，弹出窗口展示图标、标题、版本、作者、标签、简介与 `previewUrl` 预览图，并提供作者主页/查看说明/在 Finder 中显示入口；图标与预览图异步加载（网络图等待下载）。`PluginIconLoader` 拆分为同步 `menuIcon` 与异步 `resolveImage`，圆角 `rounded(_:side:)` 通用化。Debug `BUILD SUCCEEDED`。
 - M6/M7 规划内的能力（含 `iconUrl` / `previewUrl` 消费、分享导出、卸载）均已实现，暂无待办。
 - 2026-07-19，「新建插件」改为市场优先：优先走 `fetchFromMarket("TemplatePlugin")` 拉取最新模板，失败回退到内置 `Resources/TemplatePlugin`；两种来源统一放入插件目录（同名加时间戳后缀）。Debug `BUILD SUCCEEDED`。
+- 2026-07-19，准备发布 v1.1.0：1.0.0 之后的能力（三源安装、图标/详情/预览、导出、卸载、新建市场优先、通知错峰、可粘贴输入框）已归档为 `CHANGELOG.md` 的 v1.1.0；待合入 master 并打 tag 出正式包。
 
 ## 2.8、M7：插件市场按 ID 安装（状态：已实现，待运行验证）
 
