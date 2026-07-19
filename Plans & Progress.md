@@ -161,6 +161,7 @@
     - 成因：dev/release 用不同 BundleID（`…dev.finder-wand` vs `…finder-wand`），两套 App + 两套扩展可共存，开发期启用了 dev 那套。
     - 待做修复方向：1) 扩展的 CFBundleDisplayName 按 config 区分（「Finder Wand Dev」/「Finder Wand」），避免混淆；2) 文档说明正式使用只应安装/启用一套；3) 主 App 未运行时的占位文案改为引导（如「请先启动 Finder Wand」）；4) 结合 M4 开机自启保证主 App 常驻；5) 评估降低 `menu(for:)` 同步等待时延。
     - 已修复（2026-07-19，方向 1 落地）：扩展的 CFBundleDisplayName 改为按 config 区分（Debug「Finder Wand Dev」/ Release「Finder Wand」），系统「登录项与扩展」里可区分 dev 与正式版扩展，避免误启用另一套导致 build 请求写入非运行 App 的容器而超时空菜单。实现方式：`project.yml` 为扩展新增自定义构建设置 `FW_EXT_DISPLAY_NAME`（Debug/Release 两套取值），扩展 `Info.plist` 与 `project.yml` 的 `info.properties` 均将 `CFBundleDisplayName` 改为 `$(FW_EXT_DISPLAY_NAME)`；不改 `PRODUCT_NAME`，避免影响 `PRODUCT_MODULE_NAME` 与 `NSExtensionPrincipalClass` 解析。Debug 编译校验 `BUILD SUCCEEDED`，产物内 appex `CFBundleDisplayName` 为「Finder Wand Dev」。方向 2/3/4/5 仍待办。
+    - 已优化（2026-07-19，方向 5 落地）：降低 `menu(for:)` 同步等待时延。主 App 侧 `PluginService.buildNodes` 原为串行执行插件目录下每个 `.sh`（总耗时为各脚本之和，单个慢脚本会拖累后续），改为并行执行（`DispatchQueue(concurrent)` + `DispatchGroup`），结果按文件名顺序回填保证菜单顺序稳定；总耗时从「各脚本之和」降到「最慢的单个脚本」。`serialize`/`registerAction` 仍在原串行队列上执行，无并发写 `actions` 表的风险。Debug 编译校验 `BUILD SUCCEEDED`。方向 2/3 仍待办（方向 4 已由 M4 开机自启覆盖）。
   - 已修复的打包缺陷（2026-07-18，v0.1.1 正式版「右键完全无菜单项」根因）：
     - 根因：`scripts/package-dmg.sh` 注入 Info.plist 后用 `codesign --force --deep --sign -` 重签，`--deep` 连带重签内嵌 Finder Sync 扩展并丢失其 entitlements（含 `com.apple.security.app-sandbox`）。Finder Sync 扩展必须沙箱，无沙箱权限被系统拒绝加载 → 右键无任何菜单。dev 用 `build.sh`（不重签）故正常。
     - 已本地复现确认：`--deep` 重签后 appex entitlements 变空。

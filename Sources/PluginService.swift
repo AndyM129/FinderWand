@@ -85,6 +85,8 @@ final class PluginService {
     }
 
     /// 遍历插件目录执行脚本，合并解析结果
+    /// 说明：脚本之间相互独立，改为并行执行以降低 `menu(for:)` 的同步等待时延，
+    /// 总耗时从「各脚本之和」降到「最慢的单个脚本」；结果按文件名顺序回填，保证菜单顺序稳定。
     private func buildNodes(currentDir: String, selected: [String]) -> [MenuNode] {
         let directory = FWIPC.pluginDirectory
         let scripts = ((try? FileManager.default.contentsOfDirectory(at: directory,
@@ -92,24 +94,44 @@ final class PluginService {
             .filter { $0.pathExtension == "sh" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        var all: [MenuNode] = []
-        for script in scripts {
-            let result = run(executable: script.path,
-                             args: [currentDir] + selected,
-                             currentDir: currentDir,
-                             selected: selected)
-            all += PluginOutputParser.parse(result.output)
+        guard !scripts.isEmpty else { return [] }
 
-            // 构建期脚本失败/超时：注入一个不可点击的错误提示项
-            if result.status != 0 {
-                let errorNode = MenuNode(
-                    title: "⚠️ \(script.lastPathComponent)（执行失败，退出码 \(result.status)）",
-                    enabled: false)
-                all.append(errorNode)
+        // 每个脚本对应一段节点，按下标回填以保序
+        var perScriptNodes = [[MenuNode]](repeating: [], count: scripts.count)
+        let lock = NSLock()
+        let group = DispatchGroup()
+        let concurrentQueue = DispatchQueue(label: "io.github.andym129.finder-wand.plugin.run",
+                                            attributes: .concurrent)
+
+        for (index, script) in scripts.enumerated() {
+            group.enter()
+            concurrentQueue.async { [weak self] in
+                defer { group.leave() }
+                guard let self = self else { return }
+
+                let result = self.run(executable: script.path,
+                                      args: [currentDir] + selected,
+                                      currentDir: currentDir,
+                                      selected: selected)
+
+                var nodes = PluginOutputParser.parse(result.output)
+
+                // 构建期脚本失败/超时：注入一个不可点击的错误提示项
+                if result.status != 0 {
+                    nodes.append(MenuNode(
+                        title: "⚠️ \(script.lastPathComponent)（执行失败，退出码 \(result.status)）",
+                        enabled: false))
+                }
+
+                lock.lock()
+                perScriptNodes[index] = nodes
+                lock.unlock()
             }
         }
 
-        return all
+        group.wait()
+
+        return perScriptNodes.flatMap { $0 }
     }
 
     /// 把节点树序列化为 JSON，并为可执行叶子登记 actionId
