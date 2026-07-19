@@ -148,7 +148,14 @@ echo "Git 助手 | sfimage=arrow.triangle.branch"
 - 破坏性变更：只加载插件文件夹，现有顶层 `example.sh` / `demo-*.sh` / `hello.sh` 将停止加载。
 - 迁移方式：静默忽略顶层散放 `.sh` 并在文档说明，由用户把脚本迁入各自文件夹（如 `example/main.sh`）。App 不做自动迁移（避免擅自改动用户文件）。
 
-## 3.12、待定与后续
+## 3.12、插件管理与新建（菜单栏，已实现）
+
+- 「已安装插件」子菜单：枚举插件文件夹并展示每个插件的标题、id、版本、作者、标签、状态、简介；提供「启用/停用」（改写 `main.sh` 头部 `enabled`）、「查看说明」（存在 `README.md` 时打开）、「在 Finder 中显示」。
+- 「新建插件」：将 App 内置模板文件夹（`Resources/TemplatePlugin`，以文件夹引用打入 App 资源）拷贝到插件目录，同名则加时间戳后缀，随后通知并打开该文件夹。
+- 菜单栏菜单采用持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前重新枚举，保证启用态等动态信息实时。
+- 切换启用态、新建插件等操作以系统通知反馈（`UNUserNotificationCenter`，前台通过 willPresent 强制横幅展示）。
+
+## 3.13、待定与后续
 
 - 分享/安装的具体形态（导出为文件夹或压缩包、安装来源、更新策略）待后续设计。
 - 元信息多语言（如 `title.zh` / `title.en`）暂不做，`key` 命名给它留扩展空间。
