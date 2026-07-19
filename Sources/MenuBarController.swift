@@ -8,6 +8,9 @@ final class MenuBarController: NSObject {
     /// 菜单栏状态项，需强引用持有，否则会被释放导致图标消失
     private let statusItem: NSStatusItem
 
+    /// 插件详情窗口控制器（打开时强引用持有，关闭后释放）
+    private var detailWindowController: PluginDetailWindowController?
+
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
@@ -128,7 +131,7 @@ final class MenuBarController: NSObject {
         // 勾选态反映是否启用
         item.state = metadata.enabled ? .on : .off
         // 插件图标（iconUrl，网络图缓存 / 文件夹内相对图）
-        item.image = PluginIconLoader.icon(for: plugin)
+        item.image = PluginIconLoader.menuIcon(for: plugin)
 
         let detail = NSMenu()
         addInfoItem(to: detail, "ID", plugin.id)
@@ -140,13 +143,13 @@ final class MenuBarController: NSObject {
 
         detail.addItem(.separator())
 
-        // 快速切换启用/停用
-        let toggleItem = NSMenuItem(title: metadata.enabled ? "停用该插件" : "启用该插件",
-                                    action: #selector(togglePluginEnabled(_:)),
+        // 查看详情：图标、简介、预览图、作者等
+        let detailItem = NSMenuItem(title: "查看详情",
+                                    action: #selector(showPluginDetail(_:)),
                                     keyEquivalent: "")
-        toggleItem.target = self
-        toggleItem.representedObject = plugin.entryURL
-        detail.addItem(toggleItem)
+        detailItem.target = self
+        detailItem.representedObject = plugin
+        detail.addItem(detailItem)
 
         // 查看说明：插件目录存在 README.md 时才提供
         let readmeURL = plugin.entryURL.deletingLastPathComponent().appendingPathComponent("README.md")
@@ -166,6 +169,16 @@ final class MenuBarController: NSObject {
         openItem.representedObject = plugin.entryURL.deletingLastPathComponent()
         detail.addItem(openItem)
 
+        detail.addItem(.separator())
+
+        // 快速切换启用/停用
+        let toggleItem = NSMenuItem(title: metadata.enabled ? "停用该插件" : "启用该插件",
+                                    action: #selector(togglePluginEnabled(_:)),
+                                    keyEquivalent: "")
+        toggleItem.target = self
+        toggleItem.representedObject = plugin.entryURL
+        detail.addItem(toggleItem)
+        
         // 导出为 zip（分享）
         let exportItem = NSMenuItem(title: "导出为 zip…",
                                     action: #selector(exportPlugin(_:)),
@@ -382,6 +395,15 @@ final class MenuBarController: NSObject {
         guard let url = sender.representedObject as? URL else { return }
 
         NSWorkspace.shared.open(url)
+    }
+
+    /// 打开插件详情窗口
+    @objc private func showPluginDetail(_ sender: NSMenuItem) {
+        guard let plugin = sender.representedObject as? PluginService.InstalledPlugin else { return }
+
+        let controller = PluginDetailWindowController(plugin: plugin)
+        detailWindowController = controller
+        controller.show { [weak self] in self?.detailWindowController = nil }
     }
 
     /// 导出插件为 zip 到用户选择的位置（分享）

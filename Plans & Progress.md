@@ -282,7 +282,8 @@
 - 2026-07-19，已消费 `iconUrl`：新增 `Sources/PluginIconLoader.swift`，「已安装插件」菜单项显示插件图标（文件夹内相对图同步加载；网络图磁盘缓存，未命中则后台下载、下次打开显示，避免卡住菜单构建）。含相对路径防穿越校验。图标缩放到 16pt 并加圆角（半径取边长 22.37%，参考 Apple macOS 图标规范；用 `drawingHandler` 版本随分辨率重绘，Retina 清晰）。Debug `BUILD SUCCEEDED`。
 - 2026-07-19，插件分享/导出已实现：插件子菜单新增「导出为 zip…」，`NSSavePanel` 选位置后 `PluginInstaller.exportZip`（`ditto -c -k --keepParent`）打包该插件文件夹为 `<id>.zip`，完成后通知并在 Finder 中选中。Debug `BUILD SUCCEEDED`。
 - 2026-07-19，插件卸载已实现：插件子菜单新增「卸载插件…」，确认弹窗后 `FileManager.trashItem` 将插件文件夹移到废纸篓（可恢复），完成后通知并刷新菜单。Debug `BUILD SUCCEEDED`。
-- 后续（未做，留待后续版本）：`previewUrl` 预览图消费（需插件详情/安装预览 UI）。
+- 2026-07-19，插件详情窗口 + `previewUrl` 消费已实现：新增 `Sources/PluginDetailWindow.swift`，插件子菜单新增「查看详情」，弹出窗口展示图标、标题、版本、作者、标签、简介与 `previewUrl` 预览图，并提供作者主页/查看说明/在 Finder 中显示入口；图标与预览图异步加载（网络图等待下载）。`PluginIconLoader` 拆分为同步 `menuIcon` 与异步 `resolveImage`，圆角 `rounded(_:side:)` 通用化。Debug `BUILD SUCCEEDED`。
+- M6/M7 规划内的能力（含 `iconUrl` / `previewUrl` 消费、分享导出、卸载）均已实现，暂无待办。
 
 ## 2.8、M7：插件市场按 ID 安装（状态：已实现，待运行验证）
 

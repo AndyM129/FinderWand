@@ -1,57 +1,100 @@
 import AppKit
 import CryptoKit
 
-/// 已安装插件的图标加载器（用于「已安装插件」菜单展示）
+/// 插件图标 / 预览图加载器
 /// - 相对路径：从插件文件夹内读取（限制在文件夹内，防穿越）。
-/// - 网络图（http/https）：磁盘缓存；命中则同步返回，未命中则后台下载到缓存，下次打开菜单即显示。
-/// 说明：菜单每次打开都会同步构建，故网络图不做同步下载以免卡住菜单。
+/// - 网络图（http/https）：磁盘缓存。菜单场景同步返回缓存、未命中后台下载；详情窗口场景异步等待下载。
 enum PluginIconLoader {
 
     /// 菜单图标边长（点）
-    private static let side: CGFloat = 16
+    private static let menuSide: CGFloat = 16
 
-    /// 获取插件图标，无 iconUrl 或加载失败返回 nil
-    static func icon(for plugin: PluginService.InstalledPlugin) -> NSImage? {
+    // MARK: - 菜单图标（同步）
+
+    /// 菜单用图标：命中缓存/本地则返回圆角图，网络未命中则后台下载、下次打开显示
+    static func menuIcon(for plugin: PluginService.InstalledPlugin) -> NSImage? {
         guard let raw = plugin.metadata.iconUrl?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
             return nil
         }
 
+        let folder = plugin.entryURL.deletingLastPathComponent()
         if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
-            return networkIcon(urlString: raw)
+            guard let url = URL(string: raw) else { return nil }
+
+            let cacheFile = cacheURL(for: raw)
+            if FileManager.default.fileExists(atPath: cacheFile.path), let image = NSImage(contentsOf: cacheFile) {
+                return rounded(image, side: menuSide)
+            }
+
+            downloadToCache(url: url, cacheFile: cacheFile, completion: nil)
+            return nil
         }
 
-        let folder = plugin.entryURL.deletingLastPathComponent()
-        return relativeIcon(folder: folder, relativePath: raw)
+        guard let image = relativeImage(folder: folder, relativePath: raw) else { return nil }
+        return rounded(image, side: menuSide)
     }
 
-    // MARK: - 相对图
+    // MARK: - 详情窗口图片（异步）
 
-    private static func relativeIcon(folder: URL, relativePath: String) -> NSImage? {
-        // 防路径穿越：不允许 ".." 或绝对路径
+    /// 解析图标/预览图为原始图片（未加圆角、原始尺寸）。相对图同步、网络图异步（等待下载）。
+    /// completion 一律回主线程。
+    static func resolveImage(raw: String?, pluginFolder: URL, completion: @escaping (NSImage?) -> Void) {
+        guard let raw = raw?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
+            DispatchQueue.main.async { completion(nil) }
+            return
+        }
+
+        if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+            guard let url = URL(string: raw) else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            let cacheFile = cacheURL(for: raw)
+            if FileManager.default.fileExists(atPath: cacheFile.path), let image = NSImage(contentsOf: cacheFile) {
+                DispatchQueue.main.async { completion(image) }
+                return
+            }
+
+            downloadToCache(url: url, cacheFile: cacheFile) { image in
+                DispatchQueue.main.async { completion(image) }
+            }
+            return
+        }
+
+        let image = relativeImage(folder: pluginFolder, relativePath: raw)
+        DispatchQueue.main.async { completion(image) }
+    }
+
+    // MARK: - 圆角
+
+    /// 缩放到指定边长并加圆角（圆角比例参考 Apple macOS 图标规范，约 22.37% 边长）
+    static func rounded(_ image: NSImage, side: CGFloat) -> NSImage {
+        let target = NSSize(width: side, height: side)
+        let radius = side * 0.2237
+
+        let result = NSImage(size: target, flipped: false) { rect in
+            let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+            path.addClip()
+            image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
+            return true
+        }
+        result.isTemplate = false
+        return result
+    }
+
+    // MARK: - 内部
+
+    private static func relativeImage(folder: URL, relativePath: String) -> NSImage? {
         guard !relativePath.contains(".."), !relativePath.hasPrefix("/") else { return nil }
 
         let fileURL = folder.appendingPathComponent(relativePath).standardizedFileURL
         guard fileURL.path.hasPrefix(folder.standardizedFileURL.path) else { return nil }
 
-        guard let image = NSImage(contentsOf: fileURL) else { return nil }
-        return sized(image)
+        return NSImage(contentsOf: fileURL)
     }
 
-    // MARK: - 网络图（磁盘缓存）
-
-    private static func networkIcon(urlString: String) -> NSImage? {
-        guard let url = URL(string: urlString) else { return nil }
-
-        let cacheFile = cacheURL(for: urlString)
-        if FileManager.default.fileExists(atPath: cacheFile.path), let image = NSImage(contentsOf: cacheFile) {
-            return sized(image)
-        }
-
-        downloadToCache(url: url, cacheFile: cacheFile)
-        return nil
-    }
-
-    private static func downloadToCache(url: URL, cacheFile: URL) {
+    private static func downloadToCache(url: URL, cacheFile: URL, completion: ((NSImage?) -> Void)?) {
         var request = URLRequest(url: url)
         request.setValue("FinderWand", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 30
@@ -60,12 +103,16 @@ enum PluginIconLoader {
             guard
                 let data = data, !data.isEmpty,
                 let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                NSImage(data: data) != nil
-            else { return }
+                let image = NSImage(data: data)
+            else {
+                completion?(nil)
+                return
+            }
 
             try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(),
                                                      withIntermediateDirectories: true)
             try? data.write(to: cacheFile)
+            completion?(image)
         }
         task.resume()
     }
@@ -78,23 +125,5 @@ enum PluginIconLoader {
         let digest = SHA256.hash(data: Data(urlString.utf8))
         let name = digest.map { String(format: "%02x", $0) }.joined()
         return dir.appendingPathComponent(name)
-    }
-
-    // MARK: - 尺寸与圆角
-
-    /// 缩放到菜单图标尺寸并加圆角（圆角比例参考 Apple macOS 图标规范，约 22.37% 边长）
-    private static func sized(_ image: NSImage) -> NSImage {
-        let target = NSSize(width: side, height: side)
-        let radius = side * 0.2237
-
-        // 用 drawingHandler 版本，随分辨率重绘，Retina 下清晰
-        let result = NSImage(size: target, flipped: false) { rect in
-            let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-            path.addClip()
-            image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
-            return true
-        }
-        result.isTemplate = false
-        return result
     }
 }
