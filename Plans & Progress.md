@@ -160,6 +160,7 @@
     - 根因：Finder 实际启用的是开发版扩展（`登录项与扩展`显示为「Finder Wand Dev」，是开发期反复运行 dev 构建注册遗留），但用户运行的是正式版 App。dev 扩展把 build 请求写进 dev 容器并等 dev App 响应，而 dev App 未运行 → 2.5s 超时 → 空菜单占位。延迟与空菜单同源。
     - 成因：dev/release 用不同 BundleID（`…dev.finder-wand` vs `…finder-wand`），两套 App + 两套扩展可共存，开发期启用了 dev 那套。
     - 待做修复方向：1) 扩展的 CFBundleDisplayName 按 config 区分（「Finder Wand Dev」/「Finder Wand」），避免混淆；2) 文档说明正式使用只应安装/启用一套；3) 主 App 未运行时的占位文案改为引导（如「请先启动 Finder Wand」）；4) 结合 M4 开机自启保证主 App 常驻；5) 评估降低 `menu(for:)` 同步等待时延。
+    - 已修复（2026-07-19，方向 1 落地）：扩展的 CFBundleDisplayName 改为按 config 区分（Debug「Finder Wand Dev」/ Release「Finder Wand」），系统「登录项与扩展」里可区分 dev 与正式版扩展，避免误启用另一套导致 build 请求写入非运行 App 的容器而超时空菜单。实现方式：`project.yml` 为扩展新增自定义构建设置 `FW_EXT_DISPLAY_NAME`（Debug/Release 两套取值），扩展 `Info.plist` 与 `project.yml` 的 `info.properties` 均将 `CFBundleDisplayName` 改为 `$(FW_EXT_DISPLAY_NAME)`；不改 `PRODUCT_NAME`，避免影响 `PRODUCT_MODULE_NAME` 与 `NSExtensionPrincipalClass` 解析。Debug 编译校验 `BUILD SUCCEEDED`，产物内 appex `CFBundleDisplayName` 为「Finder Wand Dev」。方向 2/3/4/5 仍待办。
   - 已修复的打包缺陷（2026-07-18，v0.1.1 正式版「右键完全无菜单项」根因）：
     - 根因：`scripts/package-dmg.sh` 注入 Info.plist 后用 `codesign --force --deep --sign -` 重签，`--deep` 连带重签内嵌 Finder Sync 扩展并丢失其 entitlements（含 `com.apple.security.app-sandbox`）。Finder Sync 扩展必须沙箱，无沙箱权限被系统拒绝加载 → 右键无任何菜单。dev 用 `build.sh`（不重签）故正常。
     - 已本地复现确认：`--deep` 重签后 appex entitlements 变空。

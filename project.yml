@@ -38,7 +38,8 @@ targets:
     info:
       path: FinderSyncExtension/Info.plist
       properties:
-        CFBundleDisplayName: Finder Wand
+        # 显示名按配置区分（dev / 正式），避免系统「登录项与扩展」里混淆
+        CFBundleDisplayName: $(FW_EXT_DISPLAY_NAME)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.FinderSync
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FinderSync
@@ -63,8 +64,12 @@ targets:
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.dev.finder-wand.FinderSync
+          # 开发版扩展显示名
+          FW_EXT_DISPLAY_NAME: Finder Wand Dev
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.finder-wand.FinderSync
+          # 正式版扩展显示名
+          FW_EXT_DISPLAY_NAME: Finder Wand
 
 schemes:
   FinderWand:

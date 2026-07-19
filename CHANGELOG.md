@@ -6,9 +6,9 @@
 
 # 1、未发布（Unreleased）
 
-## 1.1、新增
+## 1.1、变更
 
-- 暂无。
+- Finder Sync 扩展的显示名（CFBundleDisplayName）按构建配置区分：开发版为「Finder Wand Dev」，正式版为「Finder Wand」。系统「登录项与扩展」里可区分两套扩展，避免误启用开发版扩展导致右键菜单空白或延迟。
 
 # 2、历史版本
 
