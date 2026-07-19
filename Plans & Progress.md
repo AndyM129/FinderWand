@@ -228,7 +228,7 @@
   - v0.1.8 已整体验证通过：App 图标、菜单栏品牌图标、右键动态菜单（图标着色/禁用置灰/分隔线/终端执行/条件显示）均正常，未发现明显 bug。
 - 备注：示例插件 `~/.config/FinderWand/hello.sh` 由用户自行维护，未覆盖其内容。
 
-## 2.7、M6：插件元信息、目录化与分享安装（状态：开发中，slice 1-4 已完成，分享/安装待做）
+## 2.7、M6：插件元信息、目录化与分享安装（状态：v1.0.0 已发布，slice 1-5 完成；分享/安装留待后续版本）
 
 目标：为「插件分享与一键安装」打基础。引入插件元信息、把插件从「单文件 `.sh`」升级为「目录化插件」，并支持 `enabled` 启用开关。详细设计见 `DESIGN.md`。
 
@@ -277,11 +277,9 @@
   - 内置模板拆分：`Resources/TemplatePlugin/main.sh` 瘦身为「元信息 + 一两行提示 + 示例」，新增 `Resources/TemplatePlugin/README.md` 骨架；两者随文件夹引用一并打入 App 资源。
   - 菜单联动：插件子菜单在其目录存在 `README.md` 时新增「查看说明」打开该文件。
   - 构建校验：Debug `BUILD SUCCEEDED`，产物 `TemplatePlugin/` 含 `main.sh` 与 `README.md`。
-- 后续 slice（未做）：`iconUrl` / `previewUrl` 相对图解析与消费、分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
-- 2026-07-19，slice 2 修复与增强：
-  - 修复：菜单栏菜单是启动时一次性构建的静态菜单，改 `enabled` 后不点刷新不更新。改为持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前 `populateMenu` 重新枚举，插件启用态/版本/开机自启勾选等动态信息实时。
-  - 增强：插件子菜单新增「停用该插件 / 启用该插件」快速开关，改写 `main.sh` 头部 `enabled` 字段（`PluginMetadataStore.setEnabled` 仅改动块内 enabled 行：已有则改值、块内无则在闭合前插入、无块则在 shebang 后插入最小块；写入后失效该文件缓存）。
-  - 构建校验：Debug `BUILD SUCCEEDED`。
+- 2026-07-19，slice 5（dmg 安装体验）已实现：dmg 卷图标复用 App 的 `AppIcon.icns`（与 App 图标一致）；安装窗口背景改为 HiDPI TIFF（以 `Resources/finderwand-dmg-bg@2x.png` 为权威源，下采样得 @1x，`tiffutil -cathidpicheck` 合成），修复 Retina 上背景被按 1x 缩小、只占窗口一角的问题；打包流程改为「UDRW 挂载 → SetFile 卷图标 + Finder 窗口布局 → 转 UDZO」。经多轮 beta 验证通过。
+- 2026-07-19，已发布 v1.0.0：dev 已合入 master 并推送，打 tag `v1.0.0` 由 CI 构建并发布正式版 Release（`FinderWand-v1.0.0.dmg` + `.sha256`）。M6 的 slice 1-5 完成。
+- 后续（未做，留待后续版本）：`iconUrl` / `previewUrl` 相对图解析与消费、插件分享/导出、一键安装与 `id` 落盘安全校验、`minAppVersion` 安装校验。
 
 # 3、待澄清与待决策清单
 
@@ -301,7 +299,7 @@
 
 - 用途：编译 Release 通用二进制并打包 `.dmg`（本地/CI 通用）。
 - 用法：`CHANNEL=stable MARKETING_VERSION=0.1.8 BUILD_NUMBER=N LABEL=v0.1.8 ./scripts/package-dmg.sh`；`CHANNEL=beta` 出测试版。
-- 说明：注入渠道/commit/时间戳到 Info.plist；从内到外 ad-hoc 重签（先带 entitlements 签扩展，再签 App，禁用 `--deep`）；`hdiutil` 产出 `.dmg` 与 `.sha256`。dmg 卷图标复用 App 的 `AppIcon.icns`（与 App 图标一致），并将 `Resources/finderwand-dmg-bg.png` 设为安装窗口背景（先做 UDRW 挂载设置卷图标属性与 Finder 窗口布局，再转 UDZO；窗口布局依赖 GUI 会话，本机因 TCC 限制 `hdiutil` 可能失败，实际出包以 CI 为准）。
+- 说明：注入渠道/commit/时间戳到 Info.plist；从内到外 ad-hoc 重签（先带 entitlements 签扩展，再签 App，禁用 `--deep`）；`hdiutil` 产出 `.dmg` 与 `.sha256`。dmg 卷图标复用 App 的 `AppIcon.icns`（与 App 图标一致）；安装窗口背景以 `Resources/finderwand-dmg-bg@2x.png`（@2x，权威源）合成 HiDPI TIFF（下采样得 @1x，`tiffutil -cathidpicheck` 合成），窗口点数取 @2x 尺寸的一半，Retina 下铺满；缺 @2x 时回退用 `finderwand-dmg-bg.png` 当 @1x。打包流程为「UDRW 挂载 → 设卷图标属性与 Finder 窗口布局 → 转 UDZO」；窗口布局依赖 GUI 会话，本机因 TCC 限制 `hdiutil` 可能失败，实际出包以 CI 为准。
 
 ## 4.3、uninstall.sh
 
