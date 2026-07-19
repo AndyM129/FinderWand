@@ -119,16 +119,51 @@ else
   echo "警告: 未找到 $VOL_ICON_SRC，dmg 卷图标将使用默认图标"
 fi
 
-# 背景图：放入隐藏目录 .background，供 Finder 窗口作为背景
+# 背景图：合成 HiDPI TIFF（@1x + @2x），避免在 Retina 屏上被按 1x 缩小、只占窗口一角。
+# 来源优先级：
+#   1) finderwand-dmg-bg@2x.png（@2x，权威源）：由它下采样得到 @1x，窗口点数 = @2x 尺寸 / 2。
+#   2) finderwand-dmg-bg.png（@1x）：视为窗口点数尺寸，放大 2 倍得到 @2x。
 BG_SRC="$ROOT/Resources/finderwand-dmg-bg.png"
+BG_SRC_2X="$ROOT/Resources/finderwand-dmg-bg@2x.png"
 HAS_BG=0
-if [[ -f "$BG_SRC" ]]; then
+BG_FINDER_REF=""
+BG_W=""
+BG_H=""
+BG_1X_FILE="$DIST/bg_1x.png"
+BG_2X_FILE="$DIST/bg_2x.png"
+
+if [[ -f "$BG_SRC_2X" ]]; then
+  # 以 @2x 为权威源：窗口点数 = @2x / 2，@1x 由下采样生成
+  SRC2X_W="$(sips -g pixelWidth "$BG_SRC_2X" 2>/dev/null | awk '/pixelWidth/{print $2}')"
+  SRC2X_H="$(sips -g pixelHeight "$BG_SRC_2X" 2>/dev/null | awk '/pixelHeight/{print $2}')"
+  BG_W=$(( ${SRC2X_W:-1280} / 2 ))
+  BG_H=$(( ${SRC2X_H:-800} / 2 ))
+  cp "$BG_SRC_2X" "$BG_2X_FILE"
+  sips -z "$BG_H" "$BG_W" "$BG_SRC_2X" --out "$BG_1X_FILE" >/dev/null 2>&1
+elif [[ -f "$BG_SRC" ]]; then
+  # 以 @1x 为源：窗口点数 = @1x 尺寸，@2x 由放大生成
+  BG_W="$(sips -g pixelWidth "$BG_SRC" 2>/dev/null | awk '/pixelWidth/{print $2}')"
+  BG_H="$(sips -g pixelHeight "$BG_SRC" 2>/dev/null | awk '/pixelHeight/{print $2}')"
+  BG_W="${BG_W:-640}"
+  BG_H="${BG_H:-400}"
+  cp "$BG_SRC" "$BG_1X_FILE"
+  sips -z "$(( BG_H * 2 ))" "$(( BG_W * 2 ))" "$BG_SRC" --out "$BG_2X_FILE" >/dev/null 2>&1
+fi
+
+if [[ -f "$BG_1X_FILE" && -f "$BG_2X_FILE" ]]; then
   mkdir -p "$STAGING/.background"
-  cp "$BG_SRC" "$STAGING/.background/bg.png"
+  if tiffutil -cathidpicheck "$BG_1X_FILE" "$BG_2X_FILE" -out "$STAGING/.background/bg.tiff" >/dev/null 2>&1; then
+    BG_FINDER_REF=".background:bg.tiff"
+  else
+    echo "警告: 合成 HiDPI 背景失败，回退为普通 PNG（Retina 上可能偏小）"
+    cp "$BG_1X_FILE" "$STAGING/.background/bg.png"
+    BG_FINDER_REF=".background:bg.png"
+  fi
   HAS_BG=1
 else
-  echo "警告: 未找到背景图 $BG_SRC，dmg 将不设置背景"
+  echo "警告: 未找到背景图（finderwand-dmg-bg@2x.png 或 finderwand-dmg-bg.png），dmg 将不设置背景"
 fi
+rm -f "$BG_1X_FILE" "$BG_2X_FILE"
 
 mkdir -p "$DIST"
 DMG="$DIST/FinderWand-${LABEL}.dmg"
@@ -150,8 +185,6 @@ fi
 
 # 通过 Finder 设置窗口大小、背景图与图标位置（依赖 GUI 会话，失败不阻断打包）
 if [[ "$HAS_BG" == "1" ]]; then
-  BG_W="$(sips -g pixelWidth "$BG_SRC" 2>/dev/null | awk '/pixelWidth/{print $2}')"
-  BG_H="$(sips -g pixelHeight "$BG_SRC" 2>/dev/null | awk '/pixelHeight/{print $2}')"
   BG_W="${BG_W:-640}"
   BG_H="${BG_H:-400}"
 
@@ -173,7 +206,7 @@ tell application "Finder"
     set theViewOptions to the icon view options of container window
     set arrangement of theViewOptions to not arranged
     set icon size of theViewOptions to 128
-    set background picture of theViewOptions to file ".background:bg.png"
+    set background picture of theViewOptions to file "$BG_FINDER_REF"
     set position of item "$APP_NAME.app" of container window to {$APP_X, $APP_Y}
     set position of item "Applications" of container window to {$ALIAS_X, $ALIAS_Y}
     update without registering applications
