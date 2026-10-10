@@ -15,7 +15,49 @@ class FinderSync: FIFinderSync {
 
     override init() {
         super.init()
-        FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/")]
+        refreshDirectoryURLs()
+        observeVolumeChanges()
+    }
+
+    // MARK: - 监控目录注册
+
+    /// 注册当前所有已挂载卷为监控目录。
+    /// Finder Sync 的目录观察不跨卷边界：`/` 只覆盖启动卷，挂载在 /Volumes 下的
+    /// 独立卷（外接盘、NAS 等网络卷）必须把各自的挂载点单独加入，右键菜单才会出现。
+    private func refreshDirectoryURLs() {
+        // mountedVolumeURLs 返回各卷挂载点（含 `/`、/Volumes/... 等）；
+        // 再并上根卷兜底，directoryURLs 为 Set，天然去重。
+        let mounted = FileManager.default.mountedVolumeURLs(
+            includingResourceValuesForKeys: nil,
+            options: []
+        ) ?? []
+
+        FIFinderSyncController.default().directoryURLs = Set(mounted).union([URL(fileURLWithPath: "/")])
+    }
+
+    /// 监听卷的挂载/卸载，变化时重新注册监控目录，使 NAS 等插拔即时生效。
+    private func observeVolumeChanges() {
+        let center = NSWorkspace.shared.notificationCenter
+        let names: [NSNotification.Name] = [
+            NSWorkspace.didMountNotification,
+            NSWorkspace.didUnmountNotification,
+            NSWorkspace.didRenameVolumeNotification
+        ]
+        for name in names {
+            center.addObserver(
+                self,
+                selector: #selector(volumesChanged(_:)),
+                name: name,
+                object: nil)
+        }
+    }
+
+    @objc private func volumesChanged(_ note: Notification) {
+        refreshDirectoryURLs()
+    }
+
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 
     /// 右键菜单：向主 App 请求菜单规格并构建

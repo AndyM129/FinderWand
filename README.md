@@ -9,7 +9,7 @@ Finder Wand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右�
 # 2、功能特性
 
 - 菜单栏常驻应用（不占用 Dock）：刷新、打开插件目录、新建插件、已安装插件管理、版本号、检查更新、开机自动运行、关于、退出。
-- Finder 右键动态菜单：在任意路径或选中文件后呼出右键菜单，遍历已启用插件并按其输出实时生成多级菜单，支持条件显示/隐藏。
+- Finder 右键动态菜单：在任意路径或选中文件后呼出右键菜单，遍历已启用插件并按其输出实时生成多级菜单，支持条件显示/隐藏。覆盖本地卷与已挂载的外接/网络卷（如 NAS），卷插拔后自动适配。
 - 目录化插件：一个插件 = 一个文件夹，自带元信息、说明与资源，便于管理与后续分享。
 - 插件管理：菜单栏查看插件信息、快速启用/停用、查看说明、在 Finder 中显示。
 - 自动更新与开机自启：检查 GitHub 最新正式版；首次运行默认开启开机自启。
@@ -126,11 +126,42 @@ Finder Wand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右�
 
 插件目录可放 `README.md` 作为面向用户的使用说明；它与 `main.sh` 头部的元信息分离，机读信息在元信息、人读说明在 README。菜单栏「已安装插件」在检测到 `README.md` 时会提供「查看说明」。
 
-# 6、从源码构建（开发者）
+# 6、开发说明
 
-- 本地编译：`./scripts/build.sh [Debug|Release]`（自动用 XcodeGen 生成工程，DerivedData 固定在 `./.build/DerivedData`）。
-- 打包 `.dmg`：见 `scripts/package-dmg.sh`（本机因 TCC 限制 `hdiutil` 可能失败，正式产物以 CI 为准）。
-- 发布：推送 `vX.Y.Z` tag 触发 GitHub Actions 构建并发布 Release。
+## 6.1、环境准备
+
+- macOS 14+、Xcode 26（本机 `xcode-select` 可能指向 CommandLineTools，`scripts/build.sh` 会自动探测并显式指定 `Xcode.app`）。
+- 需安装 XcodeGen：`brew install xcodegen`（工程文件由 `project.yml` 生成，不手动维护 `.xcodeproj`）。
+- 代码补全（SourceKit-LSP）依赖 `buildServer.json`，由构建产物自动生成。
+
+## 6.2、开发与编译
+
+- 工程结构：主 App 源码在 `Sources/`，Finder Sync 扩展在 `FinderSyncExtension/`，两端共享代码在 `Shared/`（如 IPC 协议 `FWIPC.swift`）。
+- 本地编译：`./scripts/build.sh [Debug|Release]`（默认 Debug）。脚本内部先 `xcodegen generate` 再 `xcodebuild`，DerivedData 固定在 `./.build/DerivedData`。
+- 在 Xcode 中开发：先 `xcodegen generate` 生成 `FinderWand.xcodeproj` 再打开。
+- Dev 版与正式版 bundle id、扩展显示名均不同（见 `project.yml`：Dev 版显示名 `Finder Wand Dev`），可与正式版共存、互不干扰。
+
+## 6.3、调试
+
+- 编译产物在 `./.build/DerivedData/Build/Products/<Config>/Finder Wand[ Dev].app`。
+- 首次调试需在「系统设置 → 通用 → 登录项与扩展 → 访达扩展」勾选对应扩展（Dev 版为「Finder Wand Dev」）。
+- Finder Sync 扩展由 Finder 托管为独立进程。**改动扩展（尤其是 `directoryURLs` 等注册逻辑）后，需重启主 App 并重启 Finder（`killall Finder`）才会重新加载生效。**
+- 日志：扩展内 `NSLog` 输出可在「控制台」App 按进程名 `FinderWandSync` 过滤查看；主 App 运行日志见 `~/.config/FinderWand/run.log`。
+- 验证菜单覆盖范围时，分别在本地路径、外接盘、NAS（`/Volumes/...`）下右键确认。
+
+## 6.4、提交
+
+- 分支：日常开发在 `dev`，稳定后合入 `master`/`main`。
+- Commit 遵循 Conventional Commits：`<type>(<scope>): <subject>`，type 用 `feat`/`fix`/`refactor`/`docs`/`chore` 等，scope 为模块名（如 `PluginService`、`photos`）。正文可用中文。
+- 代码改动后先本地编译通过再提交；注释用中文，标识符/日志/UI 文案保持原样（详见 `AGENT.md`）。
+
+## 6.5、发版
+
+- 更新版本号与 `CHANGELOG.md`（版本号遵循语义化版本，变更按「新增/变更/修复…」分类）。
+- 打 tag 并推送：`git tag vX.Y.Z && git push origin vX.Y.Z`，GitHub Actions（`.github/workflows/build-release.yml`）会自动构建并发布正式版 Release（`.dmg`）。
+- 手动触发 workflow（`workflow_dispatch`）可发布 beta 预发布版本。
+- 本地打包 `.dmg`：`scripts/package-dmg.sh`（本机因 TCC 限制 `hdiutil` 可能失败，正式产物以 CI 为准）。
+- 注：插件（`~/.config/FinderWand/` 下）是独立仓库、独立版本，与 App 发版无关。
 
 # 7、文档
 
