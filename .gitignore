@@ -73,3 +73,6 @@ build/
 
 ## macOS
 .DS_Store
+
+# Cadmus build data
+.cadmus/
