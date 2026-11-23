@@ -48,7 +48,8 @@ EXT_IDS=(
 )
 ALL_IDS=($APP_IDS $EXT_IDS)
 
-APP_NAMES=("Finder Wand" "Finder Wand Dev")
+# 含 v1.2.1 之前的旧名称「Finder Wand」，兼容清理旧版安装
+APP_NAMES=("FinderWand" "FinderWand Dev" "Finder Wand" "Finder Wand Dev")
 
 SCRIPT_DIR="${0:A:h}"
 ROOT="${SCRIPT_DIR:h}"
@@ -74,6 +75,8 @@ done
 typeset -a targets
 
 # 安装的 App
+targets+=( /Applications/"FinderWand.app"(N) )
+targets+=( /Applications/"FinderWand Dev.app"(N) )
 targets+=( /Applications/"Finder Wand.app"(N) )
 targets+=( /Applications/"Finder Wand Dev.app"(N) )
 
@@ -152,7 +155,7 @@ fi
 
 echo "🎉 全部完成"
 echo ""
-echo "💡 若「系统设置 > 登录项与扩展」仍残留僵尸「Finder Wand」项："
+echo "💡 若「系统设置 > 登录项与扩展」仍残留僵尸「FinderWand」项："
 echo "   ⚠️  多为 BackgroundTaskManagement 缓存，注销重登或重启即可清除；"
 echo "   ⚠️  仍不行可执行（较重，会重置所有登录项，之后合法项会重新登记）："
 echo "         sfltool resetbtm   # 执行后建议重启"

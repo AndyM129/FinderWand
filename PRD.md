@@ -2,7 +2,7 @@
 
 我想通过 AI Coding，从零开发一款 Mac APP，说明如下：
 
-- APP 名称：Finder Wand
+- APP 名称：FinderWand
 - 意思：访达的魔杖
 - 作用：
 
@@ -35,11 +35,11 @@
 
     - 开机自动运行：点击时 可以切换「开机自动运行」的状态，默认在 APP 首次运行时，自动开启该配置&功能
 
-    - 关于 Finder Wand：点击时，直接在浏览器中 打开当前项目的 GitHub 仓库主页
+    - 关于 FinderWand：点击时，直接在浏览器中 打开当前项目的 GitHub 仓库主页
 
     - —————— （分割线）
 
-    - 退出 Finder Wand：点击后，直接退出当前 APP
+    - 退出 FinderWand：点击后，直接退出当前 APP
 
   - 在任意路径下，每次呼出 Finder 的右键菜单时，都遍历插件目录下的 `.sh` 文件，并将当前所在路径，以及所有选中的文件的路径传入 `.sh` 文件
     - 每个 `.sh` 文件，为一个一级菜单项，其内容的具体规则，请参考 xbar 的设计&文档 https://github.com/matryer/xbar-plugins/blob/main/CONTRIBUTING.md
@@ -97,8 +97,8 @@
 # 3、其它已明确的产品要求（补充）
 
 - 品牌图标：App 图标与菜单栏模板图标使用品牌图，菜单栏图标随系统深浅色自适应。
-- 右键占位引导：主 App 未运行（扩展请求无响应）时，右键显示「请先启动 Finder Wand」引导；主 App 在运行但无插件可显示项时，显示「Finder Wand（无可用菜单）」。
-- 开发版与正式版区分：扩展显示名按构建配置区分（开发版「Finder Wand Dev」、正式版「Finder Wand」），避免在系统「登录项与扩展」里混淆。
+- 右键占位引导：主 App 未运行（扩展请求无响应）时，右键显示「请先启动 FinderWand」引导；主 App 在运行但无插件可显示项时，显示「FinderWand（无可用菜单）」。
+- 开发版与正式版区分：扩展显示名按构建配置区分（开发版「FinderWand Dev」、正式版「FinderWand」），避免在系统「登录项与扩展」里混淆。
 - 插件目录属用户数据：`~/.config/FinderWand/` 下的内容（插件、日志等）为用户数据，程序不得擅自覆盖用户手改的内容。
 
 # 4、工程配置
@@ -112,11 +112,11 @@
   - 开发版：
     - target：Debug
     - BundleID：`io.github.andym129.dev.finder-wand`
-    - APP Name：Finder Wand Dev
+    - APP Name：FinderWand Dev
   - 正式版：
     - target：Release
     - BundleID：`io.github.andym129.finder-wand`
-    - APP Name：Finder Wand
+    - APP Name：FinderWand
 
 
 

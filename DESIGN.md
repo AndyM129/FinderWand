@@ -1,6 +1,6 @@
 # 1、文档说明
 
-> 本文档是 Finder Wand 的设计方案文档，持续更新维护。记录整体架构现状，以及各项功能的设计结论与关键取舍，作为实现时的依据。需求与目标见 `PRD.md`，任务拆解与进展见 `Plans & Progress.md`。
+> 本文档是 FinderWand 的设计方案文档，持续更新维护。记录整体架构现状，以及各项功能的设计结论与关键取舍，作为实现时的依据。需求与目标见 `PRD.md`，任务拆解与进展见 `Plans & Progress.md`。
 
 # 2、整体架构（现状）
 
@@ -22,7 +22,7 @@
 - 扩展 `menu(for:)` 同步向主 App 请求菜单规格并构建 `NSMenu`。
 - 主 App `PluginService.buildNodes` 遍历插件目录执行脚本，`PluginOutputParser` 按 xbar 精简协议解析为菜单规格。
 - 脚本执行为并行（`DispatchQueue(concurrent)` + `DispatchGroup`），结果按文件名顺序回填保序；单脚本执行超时 1.5s。
-- 占位文案：请求无响应/超时显示「请先启动 Finder Wand」；有响应但无菜单项显示「Finder Wand（无可用菜单）」。
+- 占位文案：请求无响应/超时显示「请先启动 FinderWand」；有响应但无菜单项显示「FinderWand（无可用菜单）」。
 
 ## 2.4、Finder Sync 菜单能力约束
 

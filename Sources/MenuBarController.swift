@@ -33,7 +33,7 @@ final class MenuBarController: NSObject {
             button.image = icon
         } else {
             button.image = NSImage(systemSymbolName: "wand.and.stars",
-                                   accessibilityDescription: "Finder Wand")
+                                   accessibilityDescription: "FinderWand")
         }
     }
 
@@ -78,12 +78,12 @@ final class MenuBarController: NSObject {
         launchItem.state = LoginItemManager.shared.isEnabled ? .on : .off
         menu.addItem(launchItem)
 
-        menu.addItem(actionItem(title: "关于 Finder Wand",
+        menu.addItem(actionItem(title: "关于 FinderWand",
                                 action: #selector(openAbout)))
 
         menu.addItem(.separator())
 
-        menu.addItem(actionItem(title: "退出 Finder Wand",
+        menu.addItem(actionItem(title: "退出 FinderWand",
                                 action: #selector(quit),
                                 keyEquivalent: "q"))
     }
@@ -229,7 +229,7 @@ final class MenuBarController: NSObject {
 
     /// 新建插件：优先从插件市场拉取最新 TemplatePlugin，失败则回退到内置模板
     @objc private func newPluginFromTemplate() {
-        UserNotifier.notify(title: "Finder Wand", body: "正在获取最新模板…")
+        UserNotifier.notify(title: "FinderWand", body: "正在获取最新模板…")
 
         DispatchQueue.global().async {
             let result = PluginInstaller.fetchFromMarket(id: "TemplatePlugin")
@@ -248,7 +248,7 @@ final class MenuBarController: NSObject {
     /// 使用 App 内置模板新建插件（市场拉取失败时的回退）
     private func newPluginFromBundledTemplate() {
         guard let template = Bundle.main.url(forResource: "TemplatePlugin", withExtension: nil) else {
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 未找到内置插件模板")
+            UserNotifier.notify(title: "FinderWand", body: "⚠️ 未找到内置插件模板")
             return
         }
 
@@ -274,14 +274,14 @@ final class MenuBarController: NSObject {
                 try FileManager.default.copyItem(at: source, to: destination)
             }
         } catch {
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ 新建插件失败：\(error.localizedDescription)")
+            UserNotifier.notify(title: "FinderWand", body: "⚠️ 新建插件失败：\(error.localizedDescription)")
             if isTemp { PluginInstaller.cleanup(source.deletingLastPathComponent()) }
             return
         }
 
         if isTemp { PluginInstaller.cleanup(source.deletingLastPathComponent()) }
 
-        UserNotifier.notify(title: "Finder Wand", body: "✨ 已新建插件「\(destination.lastPathComponent)」")
+        UserNotifier.notify(title: "FinderWand", body: "✨ 已新建插件「\(destination.lastPathComponent)」")
         NSWorkspace.shared.open(destination)
 
         if let menu = statusItem.menu { populateMenu(menu) }
@@ -302,7 +302,7 @@ final class MenuBarController: NSObject {
                                           subtitle: "请输入插件市场中要安装插件的 ID",
                                           placeholder: "插件 ID") else { return }
 
-        UserNotifier.notify(title: "Finder Wand", body: "正在从插件市场获取「\(id)」…")
+        UserNotifier.notify(title: "FinderWand", body: "正在从插件市场获取「\(id)」…")
         runFetch { PluginInstaller.fetchFromMarket(id: id) }
     }
 
@@ -312,7 +312,7 @@ final class MenuBarController: NSObject {
                                             subtitle: "请输入插件仓库地址（owner/repo 或完整 GitHub 地址）",
                                             placeholder: "owner/repo") else { return }
 
-        UserNotifier.notify(title: "Finder Wand", body: "正在拉取仓库「\(input)」…")
+        UserNotifier.notify(title: "FinderWand", body: "正在拉取仓库「\(input)」…")
         runFetch { PluginInstaller.fetchFromRepo(input: input) }
     }
 
@@ -328,7 +328,7 @@ final class MenuBarController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let source = panel.url else { return }
 
-        UserNotifier.notify(title: "Finder Wand", body: "正在导入「\(source.lastPathComponent)」…")
+        UserNotifier.notify(title: "FinderWand", body: "正在导入「\(source.lastPathComponent)」…")
         runFetch { PluginInstaller.importFromDirectory(source) }
     }
 
@@ -365,7 +365,7 @@ final class MenuBarController: NSObject {
     private func handleFetchResult(_ result: PluginInstaller.FetchResult) {
         switch result {
         case .failure(let message):
-            UserNotifier.notify(title: "Finder Wand", body: "⚠️ \(message)")
+            UserNotifier.notify(title: "FinderWand", body: "⚠️ \(message)")
 
         case let .success(stagedURL, id, alreadyInstalled):
             if alreadyInstalled {
@@ -405,10 +405,10 @@ final class MenuBarController: NSObject {
             let succeeded = operation()
             DispatchQueue.main.async {
                 if succeeded {
-                    UserNotifier.notify(title: "Finder Wand", body: "✅ 已安装插件「\(id)」")
+                    UserNotifier.notify(title: "FinderWand", body: "✅ 已安装插件「\(id)」")
                     if let menu = self.statusItem.menu { self.populateMenu(menu) }
                 } else {
-                    UserNotifier.notify(title: "Finder Wand", body: "⚠️ 安装插件「\(id)」失败")
+                    UserNotifier.notify(title: "FinderWand", body: "⚠️ 安装插件「\(id)」失败")
                 }
             }
         }
@@ -454,10 +454,10 @@ final class MenuBarController: NSObject {
             let succeeded = PluginInstaller.exportZip(folder: folder, to: destination)
             DispatchQueue.main.async {
                 if succeeded {
-                    UserNotifier.notify(title: "Finder Wand", body: "✅ 已导出插件「\(id)」")
+                    UserNotifier.notify(title: "FinderWand", body: "✅ 已导出插件「\(id)」")
                     NSWorkspace.shared.activateFileViewerSelecting([destination])
                 } else {
-                    UserNotifier.notify(title: "Finder Wand", body: "⚠️ 导出插件「\(id)」失败")
+                    UserNotifier.notify(title: "FinderWand", body: "⚠️ 导出插件「\(id)」失败")
                 }
             }
         }
@@ -489,10 +489,10 @@ final class MenuBarController: NSObject {
 
             DispatchQueue.main.async {
                 if succeeded {
-                    UserNotifier.notify(title: "Finder Wand", body: "🗑️ 已卸载插件「\(id)」")
+                    UserNotifier.notify(title: "FinderWand", body: "🗑️ 已卸载插件「\(id)」")
                     if let menu = self.statusItem.menu { self.populateMenu(menu) }
                 } else {
-                    UserNotifier.notify(title: "Finder Wand", body: "⚠️ 卸载插件「\(id)」失败")
+                    UserNotifier.notify(title: "FinderWand", body: "⚠️ 卸载插件「\(id)」失败")
                 }
             }
         }
@@ -508,10 +508,10 @@ final class MenuBarController: NSObject {
 
         let succeeded = PluginMetadataStore.setEnabled(target, forEntry: entryURL)
         if succeeded {
-            UserNotifier.notify(title: "Finder Wand",
+            UserNotifier.notify(title: "FinderWand",
                                 body: "\(target ? "🟢 已启用" : "🔴 已停用")插件「\(name)」")
         } else {
-            UserNotifier.notify(title: "Finder Wand",
+            UserNotifier.notify(title: "FinderWand",
                                 body: "⚠️ 切换插件「\(name)」失败，请检查文件权限")
         }
 

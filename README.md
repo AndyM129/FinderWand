@@ -1,6 +1,6 @@
-# 1、Finder Wand 简介
+# 1、FinderWand 简介
 
-Finder Wand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右键菜单中动态注入可执行的多级菜单项。菜单内容由插件目录 `~/.config/FinderWand/` 下的插件脚本按 xbar 精简协议输出决定，点击菜单项可执行 shell 等命令、在终端运行或打开链接。
+FinderWand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右键菜单中动态注入可执行的多级菜单项。菜单内容由插件目录 `~/.config/FinderWand/` 下的插件脚本按 xbar 精简协议输出决定，点击菜单项可执行 shell 等命令、在终端运行或打开链接。
 
 - 技术栈：Swift + AppKit，Deployment Target macOS 14.0（推荐 15 及以上）。
 - 分发：无付费 Apple 开发者账号，采用 ad-hoc 签名，通过 GitHub Releases 提供 `.dmg`。
@@ -24,9 +24,9 @@ Finder Wand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右�
 
 ## 3.2、启用 Finder 扩展
 
-1. 启动一次 Finder Wand（菜单栏出现图标）。
-2. 打开「系统设置 → 通用 → 登录项与扩展 → 访达扩展」，勾选「Finder Wand」。
-3. 若右键菜单访问「桌面/文档/下载」等受保护目录需要，请在「系统设置 → 隐私与安全性 → 完全磁盘访问」中为 Finder Wand 授权（一次性设置，避免每次弹窗）。
+1. 启动一次 FinderWand（菜单栏出现图标）。
+2. 打开「系统设置 → 通用 → 登录项与扩展 → 访达扩展」，勾选「FinderWand」。
+3. 若右键菜单访问「桌面/文档/下载」等受保护目录需要，请在「系统设置 → 隐私与安全性 → 完全磁盘访问」中为 FinderWand 授权（一次性设置，避免每次弹窗）。
 
 # 4、使用
 
@@ -139,12 +139,12 @@ Finder Wand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右�
 - 工程结构：主 App 源码在 `Sources/`，Finder Sync 扩展在 `FinderSyncExtension/`，两端共享代码在 `Shared/`（如 IPC 协议 `FWIPC.swift`）。
 - 本地编译：`./scripts/build.sh [Debug|Release]`（默认 Debug）。脚本内部先 `xcodegen generate` 再 `xcodebuild`，DerivedData 固定在 `./.build/DerivedData`。
 - 在 Xcode 中开发：先 `xcodegen generate` 生成 `FinderWand.xcodeproj` 再打开。
-- Dev 版与正式版 bundle id、扩展显示名均不同（见 `project.yml`：Dev 版显示名 `Finder Wand Dev`），可与正式版共存、互不干扰。
+- Dev 版与正式版 bundle id、扩展显示名均不同（见 `project.yml`：Dev 版显示名 `FinderWand Dev`），可与正式版共存、互不干扰。
 
 ## 6.3、调试
 
-- 编译产物在 `./.build/DerivedData/Build/Products/<Config>/Finder Wand[ Dev].app`。
-- 首次调试需在「系统设置 → 通用 → 登录项与扩展 → 访达扩展」勾选对应扩展（Dev 版为「Finder Wand Dev」）。
+- 编译产物在 `./.build/DerivedData/Build/Products/<Config>/FinderWand[ Dev].app`。
+- 首次调试需在「系统设置 → 通用 → 登录项与扩展 → 访达扩展」勾选对应扩展（Dev 版为「FinderWand Dev」）。
 - Finder Sync 扩展由 Finder 托管为独立进程。**改动扩展（尤其是 `directoryURLs` 等注册逻辑）后，需重启主 App 并重启 Finder（`killall Finder`）才会重新加载生效。**
 - 日志：扩展内 `NSLog` 输出可在「控制台」App 按进程名 `FinderWandSync` 过滤查看；主 App 运行日志见 `~/.config/FinderWand/run.log`。
 - 验证菜单覆盖范围时，分别在本地路径、外接盘、NAS（`/Volumes/...`）下右键确认。

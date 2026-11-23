@@ -5,5 +5,5 @@
 PRODUCT_BUNDLE_IDENTIFIER = io.github.andym129.dev.finder-wand
 
 // 开发版 App 名称
-PRODUCT_NAME = Finder Wand Dev
-INFOPLIST_KEY_CFBundleDisplayName = Finder Wand Dev
+PRODUCT_NAME = FinderWand Dev
+INFOPLIST_KEY_CFBundleDisplayName = FinderWand Dev

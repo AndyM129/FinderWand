@@ -175,7 +175,7 @@ enum PluginInstaller {
         let metadata = PluginMetadataStore.parse(entryURL: entry)
         if let required = metadata.minAppVersion, !versionAtLeast(AppInfo.shortVersion, required) {
             cleanup(stagedURL.deletingLastPathComponent())
-            return .failure("该插件需要 Finder Wand v\(required) 及以上")
+            return .failure("该插件需要 FinderWand v\(required) 及以上")
         }
 
         let dest = AppInfo.pluginDirectory.appendingPathComponent(id, isDirectory: true)

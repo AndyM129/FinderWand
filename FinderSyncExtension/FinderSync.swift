@@ -69,13 +69,13 @@ class FinderSync: FIFinderSync {
 
         guard let items = requestMenuSpec(currentDir: currentDir, selected: selected) else {
             // 无响应/超时：主 App 大概率未启动，给出引导文案
-            menu.addItem(placeholderItem(title: "请先启动 Finder Wand"))
+            menu.addItem(placeholderItem(title: "请先启动 FinderWand"))
             return menu
         }
 
         guard !items.isEmpty else {
             // 有响应但无菜单项：主 App 在运行，只是当前无插件输出可显示项
-            menu.addItem(placeholderItem(title: "Finder Wand（无可用菜单）"))
+            menu.addItem(placeholderItem(title: "FinderWand（无可用菜单）"))
             return menu
         }
 

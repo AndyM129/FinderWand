@@ -39,8 +39,8 @@
 - 配置应用为菜单栏常驻应用（`LSUISafeElement` / `LSUIElement`，不显示 Dock 图标）。
 - 配置编译、构建缓存路径到项目根目录下的特定文件夹（`./.build/DerivedData`），独立维护，避免受其他项目影响或被清理删除。
 - 通过 Build Configuration 加 `xcconfig` 区分两套配置：
-  - 开发版（Debug）：BundleID `io.github.andym129.dev.finder-wand`，App Name `Finder Wand Dev`。
-  - 正式版（Release）：BundleID `io.github.andym129.finder-wand`，App Name `Finder Wand`。
+  - 开发版（Debug）：BundleID `io.github.andym129.dev.finder-wand`，App Name `FinderWand Dev`。
+  - 正式版（Release）：BundleID `io.github.andym129.finder-wand`，App Name `FinderWand`。
 - 建立基础目录结构与代码分层（App 入口、菜单栏控制器、插件加载、动作执行）。
 - 将 Deployment Target 设为 macOS 14.0 并写入工程配置。
 
@@ -53,6 +53,7 @@
   - Release（正式版）：`Finder Wand.app`，BundleID `io.github.andym129.finder-wand`。
   - 两者 `LSUIElement = true`（菜单栏常驻，无 Dock 图标），`LSMinimumSystemVersion = 14.0`。
 - DerivedData 已固定到 `./.build/DerivedData`；`.xcodeproj` 由 XcodeGen 生成，不纳入版本管理。
+- 2026-11-23（v1.2.1）：App 显示名称由「Finder Wand」改为「FinderWand」（无空格），`PRODUCT_NAME`、`CFBundleDisplayName`、扩展显示名、UI 文案与文档同步更新；产物改为 `FinderWand[ Dev].app`。BundleID 不变。
 - 构建命令：`./scripts/build.sh [Debug|Release]`（脚本自动探测 Xcode.app 并设置 `DEVELOPER_DIR`）。
 
 ## 2.2、M1：打包与发布流水线（状态：已完成）
@@ -89,9 +90,9 @@
 - 菜单项：打开插件目录（在 Finder 中打开 `~/.config/FinderWand`，目录不存在时自动创建）。
 - 分割线。
 - 菜单项：当前版本号显示（区分正式版与测试版，测试版格式 `v0.1.0（beta-<短哈希>-<时间戳>）`，复用 M1 注入的 `FWBuildChannel`/`FWGitCommit`/`FWBuildTimestamp`）。
-- 菜单项：关于 Finder Wand（在浏览器打开项目 GitHub 主页）。
+- 菜单项：关于 FinderWand（在浏览器打开项目 GitHub 主页）。
 - 分割线。
-- 菜单项：退出 Finder Wand。
+- 菜单项：退出 FinderWand。
 
 进展记录：
 
@@ -181,7 +182,7 @@
 
 - 检查更新：查询 GitHub Releases 是否有新安装包，有则弹窗提示（新版本号、更新说明、立即安装按钮）。优先复用成熟开源组件（如 Sparkle，需评估无签名场景下的可用性）。菜单项插入到「版本号」与「关于」之间。
 - 开机自动运行：菜单项可切换状态，App 首次运行时默认开启。菜单项插入到「检查更新」之后。
-- 备注：「关于 Finder Wand」已在 M2 实现。
+- 备注：「关于 FinderWand」已在 M2 实现。
 
 进展记录：
 

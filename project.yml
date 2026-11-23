@@ -69,11 +69,11 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.dev.finder-wand.FinderSync
           # 开发版扩展显示名
-          FW_EXT_DISPLAY_NAME: Finder Wand Dev
+          FW_EXT_DISPLAY_NAME: FinderWand Dev
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.finder-wand.FinderSync
           # 正式版扩展显示名
-          FW_EXT_DISPLAY_NAME: Finder Wand
+          FW_EXT_DISPLAY_NAME: FinderWand
 
 schemes:
   FinderWand:

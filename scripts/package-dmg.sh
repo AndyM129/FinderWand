@@ -21,7 +21,7 @@ CHANNEL="${CHANNEL:-stable}"
 MARKETING_VERSION="${MARKETING_VERSION:-}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
-APP_NAME="Finder Wand"
+APP_NAME="FinderWand"
 DERIVED_DATA="$ROOT/.build/DerivedData"
 DIST="$ROOT/.build/dist"
 
