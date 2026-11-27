@@ -11,8 +11,28 @@ final class PluginService {
 
     private let queue = DispatchQueue(label: "io.github.andym129.finder-wand.plugin")
 
-    /// 每个脚本执行的超时时间（秒）
+    /// 构建期并行执行各插件的队列
+    private let buildRunQueue = DispatchQueue(label: "io.github.andym129.finder-wand.plugin.run",
+                                              attributes: .concurrent)
+
+    /// 执行菜单动作的队列：与构建分开，耗时动作不阻塞后续右键菜单的构建
+    private let actionQueue = DispatchQueue(label: "io.github.andym129.finder-wand.plugin.action",
+                                            attributes: .concurrent)
+
+    /// 串行写 run.log，避免并发动作的日志交错
+    private let logQueue = DispatchQueue(label: "io.github.andym129.finder-wand.plugin.log")
+
+    private static let logDateFormatter = ISO8601DateFormatter()
+
+    /// 构建期每个脚本的超时时间（秒），须小于扩展的等待上限 `FWIPC.buildTimeout`
     private let scriptTimeout: TimeInterval = 1.5
+
+    /// 超时后发 SIGTERM 到强杀之间的宽限时间（秒）
+    private let terminateGrace: TimeInterval = 0.2
+
+    /// 脚本退出后等待输出读完的最长时间（秒）
+    /// 脚本在后台派生的子进程会继承输出管道，管道迟迟不关闭时不再等待，避免卡住调用方。
+    private let outputDrainTimeout: TimeInterval = 0.2
 
     /// actionId 计数与动作表（含点击时的上下文）
     private var nextActionId = 1
@@ -60,10 +80,13 @@ final class PluginService {
         let responsesDir = FWIPC.buildResponsesDirectory(containerDataDirectory: base)
         try? FileManager.default.createDirectory(at: responsesDir, withIntermediateDirectories: true)
 
-        let files = (try? FileManager.default.contentsOfDirectory(at: requestsDir,
-                                                                   includingPropertiesForKeys: nil)) ?? []
-        for file in files where file.pathExtension == "json" {
+        // 新请求优先：连续右键时，Finder 只在等最新的那次
+        let files = jsonFiles(in: requestsDir).sorted { $0.created > $1.created }
+        for (file, created) in files {
             defer { try? FileManager.default.removeItem(at: file) }
+
+            // 扩展已超时放弃等待的请求，跑插件也无人接收，直接丢弃
+            guard Date().timeIntervalSince(created) < FWIPC.buildTimeout else { continue }
 
             guard
                 let data = try? Data(contentsOf: file),
@@ -79,8 +102,31 @@ final class PluginService {
 
             let response: [String: Any] = ["items": items]
             if let data = try? JSONSerialization.data(withJSONObject: response, options: []) {
-                try? data.write(to: responsesDir.appendingPathComponent("\(requestId).json"))
+                // 原子写入：扩展轮询到文件存在即读取，非原子写可能读到半截 JSON 而误判为无响应
+                try? data.write(to: responsesDir.appendingPathComponent("\(requestId).json"), options: .atomic)
             }
+        }
+
+        removeExpiredResponses(in: responsesDir)
+    }
+
+    /// 列出目录下的 .json 文件及其创建时间
+    private func jsonFiles(in directory: URL) -> [(url: URL, created: Date)] {
+        let urls = (try? FileManager.default.contentsOfDirectory(at: directory,
+                                                                 includingPropertiesForKeys: [.creationDateKey])) ?? []
+        return urls
+            .filter { $0.pathExtension == "json" }
+            .map { url in
+                let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date()
+                return (url, created)
+            }
+    }
+
+    /// 清理扩展超时后未被取走的响应文件，避免在扩展容器内堆积
+    private func removeExpiredResponses(in directory: URL) {
+        for (file, created) in jsonFiles(in: directory)
+        where Date().timeIntervalSince(created) > FWIPC.buildTimeout * 2 {
+            try? FileManager.default.removeItem(at: file)
         }
     }
 
@@ -131,24 +177,27 @@ final class PluginService {
         var perPluginNodes = [[MenuNode]](repeating: [], count: plugins.count)
         let lock = NSLock()
         let group = DispatchGroup()
-        let concurrentQueue = DispatchQueue(label: "io.github.andym129.finder-wand.plugin.run",
-                                            attributes: .concurrent)
 
         for (index, plugin) in plugins.enumerated() {
             group.enter()
-            concurrentQueue.async { [weak self] in
+            buildRunQueue.async { [weak self] in
                 defer { group.leave() }
                 guard let self = self else { return }
 
                 let result = self.run(executable: plugin.entryURL.path,
                                       args: [currentDir] + selected,
                                       currentDir: currentDir,
-                                      selected: selected)
+                                      selected: selected,
+                                      timeout: self.scriptTimeout)
 
                 var nodes = PluginOutputParser.parse(result.output)
 
                 // 构建期脚本失败/超时：注入一个不可点击的错误提示项（以插件 id 标识）
-                if result.status != 0 {
+                if result.timedOut {
+                    nodes.append(MenuNode(
+                        title: "⚠️ \(plugin.id)（执行超时）",
+                        enabled: false))
+                } else if result.status != 0 {
                     nodes.append(MenuNode(
                         title: "⚠️ \(plugin.id)（执行失败，退出码 \(result.status)）",
                         enabled: false))
@@ -210,9 +259,7 @@ final class PluginService {
         guard let base = containerData else { return }
 
         let actionsDir = FWIPC.actionRequestsDirectory(containerDataDirectory: base)
-        let files = (try? FileManager.default.contentsOfDirectory(at: actionsDir,
-                                                                  includingPropertiesForKeys: nil)) ?? []
-        for file in files where file.pathExtension == "json" {
+        for (file, _) in jsonFiles(in: actionsDir).sorted(by: { $0.created < $1.created }) {
             defer { try? FileManager.default.removeItem(at: file) }
 
             guard
@@ -222,7 +269,10 @@ final class PluginService {
                 let stored = actions[actionId]
             else { continue }
 
-            execute(stored)
+            // 动作表只在串行队列上读写；执行放到独立队列，避免耗时动作阻塞右键菜单构建
+            actionQueue.async { [weak self] in
+                self?.execute(stored)
+            }
         }
     }
 
@@ -241,10 +291,12 @@ final class PluginService {
                              status: 0,
                              output: "已在终端中打开")
             } else {
+                // 后台动作不在右键热路径上，不设超时，运行到脚本自行结束（耗时的 AppleScript 等不会被中途杀掉）
                 let result = run(executable: path,
                                  args: args,
                                  currentDir: stored.currentDir,
-                                 selected: stored.selected)
+                                 selected: stored.selected,
+                                 timeout: nil)
                 appendRunLog(summary: "bash=\(path) args=\(args.joined(separator: " "))",
                              status: result.status,
                              output: result.output)
@@ -316,9 +368,24 @@ final class PluginService {
 
     // MARK: - 执行脚本
 
-    /// 执行可执行文件，返回退出码与合并输出（带超时）
-    private func run(executable: String, args: [String], currentDir: String, selected: [String]) -> (status: Int32, output: String) {
-        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable)
+    /// 脚本执行结果
+    private struct RunResult {
+        /// 退出码；启动失败或超时为 -1
+        let status: Int32
+        /// 标准输出与标准错误的合并内容
+        let output: String
+        /// 是否因超时被终止
+        let timedOut: Bool
+    }
+
+    /// 执行可执行文件，返回退出码与合并输出
+    /// - Parameter timeout: 超时秒数，超时先 SIGTERM、宽限后 SIGKILL；为 nil 时等待脚本自行结束
+    private func run(executable: String,
+                     args: [String],
+                     currentDir: String,
+                     selected: [String],
+                     timeout: TimeInterval?) -> RunResult {
+        ensureExecutable(executable)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -346,42 +413,112 @@ final class PluginService {
         process.standardOutput = pipe
         process.standardError = pipe
 
-        let semaphore = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in semaphore.signal() }
+        // 边执行边读取输出：输出超过管道缓冲（约 64KB）时脚本不会因写阻塞而被误判超时。
+        // 读取一直持续到管道关闭（含脚本派生的后台子进程），闭包持有 pipe 保证读端不被提前释放，
+        // 子进程写输出不会收到 SIGPIPE；读到 EOF 后解除闭包，释放 pipe。
+        let collector = OutputCollector()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                collector.finish()
+            } else {
+                collector.append(chunk)
+            }
+        }
+
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
 
         do {
             try process.run()
         } catch {
-            return (-1, "执行失败: \(error.localizedDescription)")
+            pipe.fileHandleForReading.readabilityHandler = nil
+            return RunResult(status: -1, output: "执行失败: \(error.localizedDescription)", timedOut: false)
         }
 
-        if semaphore.wait(timeout: .now() + scriptTimeout) == .timedOut {
-            process.terminate()
+        var timedOut = false
+        if let timeout = timeout {
+            if exited.wait(timeout: .now() + timeout) == .timedOut {
+                timedOut = true
+                process.terminate()
+                if exited.wait(timeout: .now() + terminateGrace) == .timedOut {
+                    kill(process.processIdentifier, SIGKILL)
+                    exited.wait()
+                }
+            }
+        } else {
+            exited.wait()
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
-        return (process.isRunning ? -1 : process.terminationStatus, output)
+        collector.waitUntilFinished(timeout: outputDrainTimeout)
+
+        return RunResult(status: timedOut ? -1 : process.terminationStatus,
+                         output: collector.text,
+                         timedOut: timedOut)
+    }
+
+    /// 确保脚本有可执行权限；已可执行时不改动，避免每次右键都写文件属性
+    private func ensureExecutable(_ path: String) {
+        guard !FileManager.default.isExecutableFile(atPath: path) else { return }
+
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
     }
 
     // MARK: - 日志
 
     private func appendRunLog(summary: String, status: Int32, output: String) {
-        let directory = FWIPC.pluginDirectory
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        let logURL = directory.appendingPathComponent("run.log")
-        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let timestamp = Self.logDateFormatter.string(from: Date())
         let snippet = output.trimmingCharacters(in: .whitespacesAndNewlines)
         let line = "[\(timestamp)] \(summary) exit=\(status)\n  output=\(snippet)\n\n"
         guard let data = line.data(using: .utf8) else { return }
 
-        if let handle = try? FileHandle(forWritingTo: logURL) {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            try? handle.close()
-        } else {
-            try? data.write(to: logURL)
+        logQueue.async {
+            let directory = FWIPC.pluginDirectory
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+            let logURL = directory.appendingPathComponent("run.log")
+            if let handle = try? FileHandle(forWritingTo: logURL) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            } else {
+                try? data.write(to: logURL)
+            }
         }
+    }
+}
+
+/// 线程安全的脚本输出收集器
+private final class OutputCollector {
+
+    private let lock = NSLock()
+    private var data = Data()
+    private let finished = DispatchSemaphore(value: 0)
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    /// 管道读到 EOF 时调用
+    func finish() {
+        finished.signal()
+    }
+
+    /// 等待输出读完，最多等待 timeout 秒
+    func waitUntilFinished(timeout: TimeInterval) {
+        if finished.wait(timeout: .now() + timeout) == .success {
+            // 归还信号，重复等待时立即返回
+            finished.signal()
+        }
+    }
+
+    var text: String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return String(decoding: data, as: UTF8.self)
     }
 }

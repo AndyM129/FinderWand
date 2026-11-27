@@ -349,8 +349,9 @@ enum PluginInstaller {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        // 输出不使用，直接丢弃；用未读取的 Pipe 时输出超过管道缓冲会让工具写阻塞而卡死
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
         do {
             try process.run()
             process.waitUntilExit()

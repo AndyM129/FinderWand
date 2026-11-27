@@ -13,15 +13,19 @@
 ## 2.2、IPC 通道
 
 - 所有 IPC 文件位于「扩展沙箱容器」内（扩展读写自己容器无需额外权限，非沙箱主 App 可读写该路径）。
-- 构建菜单：扩展写 build 请求并轮询 build 响应（超时 2.5s），主 App 收到 Darwin 通知后跑脚本、解析、写响应。
-- 执行动作：扩展写 action 请求并发 Darwin 通知，主 App 执行对应动作（bash / terminal / href），结果写 `~/.config/FinderWand/run.log`。
+- 构建菜单：扩展写 build 请求并轮询 build 响应（超时 `FWIPC.buildTimeout` = 2.5s，轮询间隔 5ms），主 App 收到 Darwin 通知后跑脚本、解析、写响应。扩展超时后撤回未被取走的请求；主 App 新请求优先处理，丢弃已超过 2.5s 的过期请求，并清理无人取走的响应。
+- 执行动作：扩展写 action 请求并发 Darwin 通知，主 App 在独立并发队列执行对应动作（bash / terminal / href），不阻塞后续菜单构建；结果串行写 `~/.config/FinderWand/run.log`。
+- 请求与响应文件一律原子写入，避免对方读到半截 JSON。
 - 共享常量与路径推导集中在 `Shared/FWIPC.swift`，同时编入两个 target。
 
 ## 2.3、右键菜单构建流程
 
 - 扩展 `menu(for:)` 同步向主 App 请求菜单规格并构建 `NSMenu`。
 - 主 App `PluginService.buildNodes` 遍历插件目录执行脚本，`PluginOutputParser` 按 xbar 精简协议解析为菜单规格。
-- 脚本执行为并行（`DispatchQueue(concurrent)` + `DispatchGroup`），结果按文件名顺序回填保序；单脚本执行超时 1.5s。
+- 脚本执行为并行（`DispatchQueue(concurrent)` + `DispatchGroup`），结果按文件名顺序回填保序；构建期单脚本超时 1.5s（先 SIGTERM，0.2s 后仍未退出则 SIGKILL），超时项提示「执行超时」，非 0 退出码提示「执行失败，退出码 N」。
+- 后台动作（`bash=` 且非 `terminal=true`）不设超时，运行到脚本自行结束。
+- 脚本输出边执行边读取，输出超过管道缓冲（约 64KB）不会写阻塞；脚本退出后最多再等 0.2s 读完输出，后台子进程继续持有管道时不阻塞菜单构建。
+- 入口脚本已有执行权限时不再改写权限。
 - 占位文案：请求无响应/超时显示「请先启动 FinderWand」；有响应但无菜单项显示「FinderWand（无可用菜单）」。
 
 ## 2.4、Finder Sync 菜单能力约束

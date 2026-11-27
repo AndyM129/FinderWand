@@ -10,8 +10,8 @@ import FinderSync
 /// 说明：扩展不读插件目录、不执行脚本，全部交由非沙箱主 App，规避沙箱限制。
 class FinderSync: FIFinderSync {
 
-    /// 同步等待菜单规格的超时时间（秒），避免慢脚本卡住 Finder
-    private let buildTimeout: TimeInterval = 2.5
+    /// 轮询响应文件的间隔（微秒）：fileExists 开销极小，间隔越短菜单出现越快
+    private let pollInterval: useconds_t = 5_000
 
     override init() {
         super.init()
@@ -79,7 +79,7 @@ class FinderSync: FIFinderSync {
             return menu
         }
 
-        appendItems(items, to: menu)
+        appendItems(items, to: menu, isDark: Self.isDarkAppearance)
         return menu
     }
 
@@ -99,6 +99,7 @@ class FinderSync: FIFinderSync {
 
         let requestsDir = FWIPC.buildRequestsDirectory(containerDataDirectory: containerData)
         let responsesDir = FWIPC.buildResponsesDirectory(containerDataDirectory: containerData)
+        let requestURL = requestsDir.appendingPathComponent("\(requestId).json")
         let responseURL = responsesDir.appendingPathComponent("\(requestId).json")
 
         let request: [String: Any] = [
@@ -111,7 +112,8 @@ class FinderSync: FIFinderSync {
             try FileManager.default.createDirectory(at: requestsDir, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: responsesDir, withIntermediateDirectories: true)
             let data = try JSONSerialization.data(withJSONObject: request, options: [])
-            try data.write(to: requestsDir.appendingPathComponent("\(requestId).json"))
+            // 原子写入，避免主 App 读到半截请求
+            try data.write(to: requestURL, options: .atomic)
         } catch {
             NSLog("FinderWand 扩展: 写构建请求失败 \(error.localizedDescription)")
             return nil
@@ -119,13 +121,18 @@ class FinderSync: FIFinderSync {
 
         postDarwinNotification(FWIPC.darwinBuildName)
 
-        return waitForResponse(at: responseURL)
+        let items = waitForResponse(at: responseURL)
+        if items == nil {
+            // 超时：撤回尚未被主 App 取走的请求，主 App 未运行时不留积压
+            try? FileManager.default.removeItem(at: requestURL)
+        }
+
+        return items
     }
 
     /// 轮询等待主 App 写出的响应文件
     private func waitForResponse(at responseURL: URL) -> [[String: Any]]? {
-        let deadline = Date().addingTimeInterval(buildTimeout)
-        let interval: useconds_t = 20_000 // 20ms
+        let deadline = Date().addingTimeInterval(FWIPC.buildTimeout)
 
         while Date() < deadline {
             if FileManager.default.fileExists(atPath: responseURL.path) {
@@ -139,7 +146,7 @@ class FinderSync: FIFinderSync {
 
                 return object["items"] as? [[String: Any]]
             }
-            usleep(interval)
+            usleep(pollInterval)
         }
 
         return nil
@@ -148,7 +155,7 @@ class FinderSync: FIFinderSync {
     // MARK: - 构建菜单
 
     /// 递归把菜单项数组添加到菜单
-    private func appendItems(_ items: [[String: Any]], to menu: NSMenu, isSubmenu: Bool = false) {
+    private func appendItems(_ items: [[String: Any]], to menu: NSMenu, isDark: Bool) {
         for item in items {
             if item["separator"] as? Bool == true {
                 // Finder Sync 右键菜单不支持原生分隔线（NSMenuItem.separator 会显示为空行），
@@ -165,7 +172,7 @@ class FinderSync: FIFinderSync {
 
             if let children = item["children"] as? [[String: Any]], !children.isEmpty {
                 let submenu = NSMenu(title: title)
-                appendItems(children, to: submenu, isSubmenu: true)
+                appendItems(children, to: submenu, isDark: isDark)
                 menuItem.submenu = submenu
             } else if let actionId = item["actionId"] as? Int {
                 menuItem.action = #selector(runAction(_:))
@@ -180,20 +187,24 @@ class FinderSync: FIFinderSync {
 
             // 图标：按当前深浅色着色；禁用项图标同步变暗，与置灰标题一致
             if let symbol = item["sfimage"] as? String {
-                menuItem.image = Self.tintedSymbol(symbol, accessibilityDescription: title, enabled: isEnabled)
+                menuItem.image = Self.tintedSymbol(symbol, accessibilityDescription: title, enabled: isEnabled, isDark: isDark)
             }
 
             menu.addItem(menuItem)
         }
     }
 
+    /// 当前系统是否为深色外观
+    private static var isDarkAppearance: Bool {
+        UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
+    }
+
     /// 生成按当前系统深浅色着色的 SF Symbol 图标（禁用项变暗）
-    private static func tintedSymbol(_ name: String, accessibilityDescription: String, enabled: Bool) -> NSImage? {
+    private static func tintedSymbol(_ name: String, accessibilityDescription: String, enabled: Bool, isDark: Bool) -> NSImage? {
         guard let base = NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription) else {
             return nil
         }
 
-        let isDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
         var color: NSColor = isDark ? .white : .black
         if !enabled {
             // 与置灰标题保持一致：降低不透明度
@@ -219,7 +230,7 @@ class FinderSync: FIFinderSync {
         do {
             try FileManager.default.createDirectory(at: actionsDir, withIntermediateDirectories: true)
             let data = try JSONSerialization.data(withJSONObject: ["actionId": actionId], options: [])
-            try data.write(to: actionsDir.appendingPathComponent("\(UUID().uuidString).json"))
+            try data.write(to: actionsDir.appendingPathComponent("\(UUID().uuidString).json"), options: .atomic)
         } catch {
             NSLog("FinderWand 扩展: 写动作请求失败 \(error.localizedDescription)")
             return

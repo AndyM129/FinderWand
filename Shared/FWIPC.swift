@@ -15,6 +15,10 @@ enum FWIPC {
     /// 扩展请求主 App 执行某个菜单动作的 Darwin 通知名
     static let darwinActionName = "io.github.andym129.finder-wand.action"
 
+    /// 扩展同步等待菜单规格的超时时间（秒）
+    /// 主 App 据此判断构建请求是否已过期（扩展已放弃等待），过期请求不再执行插件。
+    static let buildTimeout: TimeInterval = 2.5
+
     /// 插件目录：真实 home 下的 ~/.config/FinderWand
     /// 注意：沙箱扩展中 `NSHomeDirectory()` / `homeDirectoryForCurrentUser` 返回的是容器路径，
     /// 主 App（非沙箱）用它枚举脚本；扩展不直接读该目录。
