@@ -22,21 +22,24 @@
 
 - 扩展 `menu(for:)` 同步向主 App 请求菜单规格并构建 `NSMenu`。
 - 主 App `PluginService.buildNodes` 遍历插件目录执行脚本，`PluginOutputParser` 按 xbar 精简协议解析为菜单规格。
-- 脚本执行为并行（`DispatchQueue(concurrent)` + `DispatchGroup`），结果按文件名顺序回填保序；构建期单脚本超时 1.5s（先 SIGTERM，0.2s 后仍未退出则 SIGKILL），超时项提示「执行超时」，非 0 退出码提示「执行失败，退出码 N」。
+- 脚本执行为并行（`DispatchQueue(concurrent)` + `DispatchGroup`），结果按文件名顺序回填保序；构建期单脚本超时默认 1.5s，插件可用元信息 `timeout` 改为 0.1 ~ 2.0s（先 SIGTERM，0.2s 后仍未退出则 SIGKILL）。主 App 在请求创建后 2.3s 截止，到点仍未返回的插件按超时处理，保证扩展 2.5s 内拿到其余插件的菜单。
+- 构建期失败提示：超时显示「⚠️ <插件 id>（执行超时）」，非 0 退出码显示「⚠️ <插件 id>（执行失败，退出码 N）」，并把输出写入 `run.log`；点击提示项打开 `run.log`。
+- 运行日志 `run.log` 超过 1MB 时改名为 `run.log.1`（覆盖更早的那份），只保留 1 份旧日志，总大小不超过约 2MB。
 - 后台动作（`bash=` 且非 `terminal=true`）不设超时，运行到脚本自行结束。
 - 脚本输出边执行边读取，输出超过管道缓冲（约 64KB）不会写阻塞；脚本退出后最多再等 0.2s 读完输出，后台子进程继续持有管道时不阻塞菜单构建。
 - 入口脚本已有执行权限时不再改写权限。
-- 占位文案：请求无响应/超时显示「请先启动 FinderWand」；有响应但无菜单项显示「FinderWand（无可用菜单）」。
+- 占位文案：请求无响应/超时显示「请先启动 FinderWand（点击启动）」，点击后扩展用 `NSWorkspace.openApplication` 启动宿主 App（扩展所在的 `<App>.app`）；有响应但无菜单项显示「FinderWand（无可用菜单）」。
 
 ## 2.4、Finder Sync 菜单能力约束
 
 - 右键菜单仅保留 `title` / `action` / `image` / `enabled` / `tag` / `state` / `indentationLevel` / 子菜单。
-- `representedObject` 不跨 XPC 存活，改用 `tag` 携带 actionId；`attributedTitle` 不支持，无法设文本颜色/字体；原生分隔线显示为空行，用禁用的 `----------` 模拟；模板图不自动适配深浅色，按 `AppleInterfaceStyle` 着色。
+- `representedObject` 不跨 XPC 存活，改用 `tag` 携带 actionId；`attributedTitle` 不支持，无法设文本颜色/字体；原生分隔线显示为空行（2026-11 复查 Apple 开发者论坛仍无官方方案），用禁用的 `-------------------`（19 个短横线）模拟；模板图不自动适配深浅色，按 `AppleInterfaceStyle` 着色。
 
 ## 2.5、插件协议（xbar 精简子集，现状）
 
 - 每行一个菜单项；前导 `--` 对表示层级；纯 `-`（>=3）为分隔线；`标题 | key=value`。
-- 支持参数：`bash=` / `paramN=`、`terminal=true`、`href=`、`disabled=true`、`sfimage=`。
+- 支持参数：`bash=` / `paramN=`、`terminal=true`、`href=`、`disabled=true`、`sfimage=`、`image=`。
+- `image=`：插件文件夹内的相对路径（拒绝 `..` 与绝对路径），或 base64 图片数据（兼容 xbar）。扩展在沙箱里读不到插件目录，由主 App 缩放为 16pt（2x 像素）PNG、base64 传给扩展，按「文件夹 + 取值 + mtime」缓存；原样显示不着色，与 `sfimage=` 同时给出时用 `image=`。
 - 脚本不输出任何行即不显示，可用于条件显示/隐藏。
 
 # 3、插件元信息、目录化与分享安装（2026-07-19 定稿）
@@ -114,6 +117,7 @@ echo "Git 助手 | sfimage=arrow.triangle.branch"
 | authorUrl | 作者主页 | 单行 |
 | minAppVersion | 最低 App 版本 | 安装时语义化比较，低于则拒绝安装 |
 | enabled | 启用开关 | `true` / `false`，缺省视为启用 |
+| timeout | 构建右键菜单时的超时（秒） | 缺省 1.5；取值限制在 0.1 ~ 2.0，上限受扩展整体等待 2.5s 约束 |
 
 ## 3.6、enabled 语义
 
@@ -156,7 +160,8 @@ echo "Git 助手 | sfimage=arrow.triangle.branch"
 
 - 「已安装插件」子菜单：枚举插件文件夹并展示每个插件的标题、id、版本、作者、标签、状态、简介；提供「查看详情」（弹出详情窗口：图标、标题、版本、作者、标签、简介、`previewUrl` 预览图，及作者主页/说明/定位入口）、「启用/停用」（改写 `main.sh` 头部 `enabled`）、「查看说明」（存在 `README.md` 时打开）、「在 Finder 中显示」、「导出为 zip…」（`NSSavePanel` 选位置，`ditto -c -k --keepParent` 打包该插件文件夹，用于分享）、「卸载插件…」（确认后 `FileManager.trashItem` 移到废纸篓，可恢复）。菜单项图标取 `iconUrl`（文件夹内相对图或网络图，网络图磁盘缓存、后台下载），缩放 16pt 并加圆角（约 22.37% 边长，参考 Apple 图标规范）。
 - 「新建插件」：优先从插件市场拉取最新 `TemplatePlugin`（`fetchFromMarket`），失败则回退到 App 内置模板（`Resources/TemplatePlugin`，以文件夹引用打入 App 资源）；放入插件目录时同名加时间戳后缀，随后通知并打开该文件夹。
-- 菜单栏菜单采用持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前重新枚举，保证启用态等动态信息实时。
+- 菜单栏菜单采用持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前重新枚举，保证启用态等动态信息实时。右键菜单每次右键都实时构建，因此不提供「刷新」菜单项（2026-11-27 移除）。
+- 检查更新：除菜单栏手动「检查更新」外，启动 30s 后及之后每 24 小时静默检查一次；发现新版本时发系统通知（点击打开 dmg 下载地址），同一版本只通知一次；已是最新或失败时不打扰。本地开发构建（channel 为 dev）不自动检查。
 - 切换启用态、新建插件等操作以系统通知反馈（`UNUserNotificationCenter`，前台通过 willPresent 强制横幅展示）。
 
 ## 3.13、待定与后续

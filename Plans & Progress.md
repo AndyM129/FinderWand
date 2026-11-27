@@ -39,7 +39,7 @@
 - 配置应用为菜单栏常驻应用（`LSUISafeElement` / `LSUIElement`，不显示 Dock 图标）。
 - 配置编译、构建缓存路径到项目根目录下的特定文件夹（`./.build/DerivedData`），独立维护，避免受其他项目影响或被清理删除。
 - 通过 Build Configuration 加 `xcconfig` 区分两套配置：
-  - 开发版（Debug）：BundleID `io.github.andym129.dev.finder-wand`，App Name `FinderWand Dev`。
+  - 开发版（Debug）：BundleID `io.github.andym129.dev.finder-wand`，App Name `FinderWand-Dev`（2026-11-27 由 `FinderWand Dev` 改为 `-Dev` 后缀）。
   - 正式版（Release）：BundleID `io.github.andym129.finder-wand`，App Name `FinderWand`。
 - 建立基础目录结构与代码分层（App 入口、菜单栏控制器、插件加载、动作执行）。
 - 将 Deployment Target 设为 macOS 14.0 并写入工程配置。

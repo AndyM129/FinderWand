@@ -38,13 +38,10 @@ final class MenuBarController: NSObject {
     }
 
     /// 填充下拉菜单（清空后重建），每次菜单打开前调用以保证动态信息实时
-    /// 菜单项：刷新、打开插件目录、已安装插件、分割线、版本号、检查更新、开机自动运行、关于、分割线、退出。
+    /// 菜单项：打开插件目录、已安装插件、安装插件、新建插件、分割线、版本号、检查更新、开机自动运行、关于、分割线、退出。
     private func populateMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(actionItem(title: "刷新右键菜单",
-                                action: #selector(refresh),
-                                keyEquivalent: "r"))
         menu.addItem(actionItem(title: "打开插件目录",
                                 action: #selector(openPluginDirectory)))
 
@@ -209,11 +206,6 @@ final class MenuBarController: NSObject {
     }
 
     // MARK: - 菜单动作
-
-    /// 刷新：重建菜单，同时重新枚举已安装插件（元信息按 mtime 缓存，改动会自动反映）
-    @objc private func refresh() {
-        if let menu = statusItem.menu { populateMenu(menu) }
-    }
 
     /// 打开插件目录（不存在则自动创建）
     @objc private func openPluginDirectory() {

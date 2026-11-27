@@ -97,6 +97,7 @@ FinderWand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右键
 | authorUrl | 作者主页 |
 | minAppVersion | 安装所需最低 App 版本 |
 | enabled | 启用开关，仅显式为 `false` 时不加载，缺省视为启用 |
+| timeout | 构建右键菜单时的超时秒数，缺省 1.5，可设 0.1 ~ 2.0 |
 
 ## 5.3、输出协议（xbar 精简子集）
 
@@ -111,6 +112,7 @@ FinderWand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右键
   - `href=<url>`：点击打开链接。
   - `disabled=true`：不可点击（置灰）。
   - `sfimage=<SF Symbol 名>`：菜单项图标（随深浅色自动着色）。
+  - `image=<插件文件夹内的相对路径或 base64 图片>`：菜单项图片（16pt，原样显示），与 `sfimage` 同时给出时优先用它。
 - 脚本不输出任何行即不显示，可用于条件显示/隐藏。
 
 说明：Finder Sync 右键菜单不支持文本颜色/字体与原生分隔线，分隔线以短横线模拟。
@@ -139,12 +141,12 @@ FinderWand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右键
 - 工程结构：主 App 源码在 `Sources/`，Finder Sync 扩展在 `FinderSyncExtension/`，两端共享代码在 `Shared/`（如 IPC 协议 `FWIPC.swift`）。
 - 本地编译：`./scripts/build.sh [Debug|Release]`（默认 Debug）。脚本内部先 `xcodegen generate` 再 `xcodebuild`，DerivedData 固定在 `./.build/DerivedData`。
 - 在 Xcode 中开发：先 `xcodegen generate` 生成 `FinderWand.xcodeproj` 再打开。
-- Dev 版与正式版 bundle id、扩展显示名均不同（见 `project.yml`：Dev 版显示名 `FinderWand Dev`），可与正式版共存、互不干扰。
+- Dev 版与正式版 bundle id、扩展显示名均不同（见 `project.yml`：Dev 版显示名 `FinderWand-Dev`），可与正式版共存、互不干扰。
 
 ## 6.3、调试
 
-- 编译产物在 `./.build/DerivedData/Build/Products/<Config>/FinderWand[ Dev].app`。
-- 首次调试需在「系统设置 → 通用 → 登录项与扩展 → 访达扩展」勾选对应扩展（Dev 版为「FinderWand Dev」）。
+- 编译产物在 `./.build/DerivedData/Build/Products/<Config>/FinderWand[-Dev].app`。
+- 首次调试需在「系统设置 → 通用 → 登录项与扩展 → 访达扩展」勾选对应扩展（Dev 版为「FinderWand-Dev」）。
 - Finder Sync 扩展由 Finder 托管为独立进程。**改动扩展（尤其是 `directoryURLs` 等注册逻辑）后，需重启主 App 并重启 Finder（`killall Finder`）才会重新加载生效。**
 - 日志：扩展内 `NSLog` 输出可在「控制台」App 按进程名 `FinderWandSync` 过滤查看；主 App 运行日志见 `~/.config/FinderWand/run.log`。
 - 验证菜单覆盖范围时，分别在本地路径、外接盘、NAS（`/Volumes/...`）下右键确认。

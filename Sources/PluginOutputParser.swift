@@ -19,6 +19,12 @@ final class MenuNode {
     /// SF Symbol 图标名（sfimage=）
     var sfimage: String?
 
+    /// 图片（image=）：插件文件夹内的相对路径，或 base64 编码的图片数据
+    var image: String?
+
+    /// 解析后的菜单图标 PNG 数据（base64），由主 App 按 `image` 生成后传给扩展
+    var imageData: String?
+
     init(title: String, isSeparator: Bool = false, enabled: Bool = true, action: PluginAction? = nil) {
         self.title = title
         self.isSeparator = isSeparator
@@ -39,6 +45,7 @@ final class MenuNode {
 ///       - `href=<url>` 表示点击打开链接。
 ///       - `disabled=true` 表示不可点击（置灰）。
 ///       - `sfimage=<SF Symbol 名>` 为菜单项加图标（图标会按当前深浅色着色）。
+///       - `image=<插件文件夹内的相对路径 | base64 图片>` 为菜单项加图片（原样显示，16pt），与 `sfimage` 同时给出时优先用 `image`。
 ///   - 脚本输出为空即不贡献任何菜单项（实现条件显示/隐藏）。
 ///
 /// Finder Sync 限制（经确认）：右键菜单仅保留 `title`/`action`/`image`/`enabled`/`tag`/`state`/
@@ -92,6 +99,7 @@ enum PluginOutputParser {
         }
 
         node.sfimage = params["sfimage"]
+        node.image = params["image"]
 
         if let href = params["href"] {
             node.action = .href(href)

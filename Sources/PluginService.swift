@@ -24,8 +24,17 @@ final class PluginService {
 
     private static let logDateFormatter = ISO8601DateFormatter()
 
-    /// 构建期每个脚本的超时时间（秒），须小于扩展的等待上限 `FWIPC.buildTimeout`
+    /// 运行日志文件名（位于插件目录）
+    static let logFileName = "run.log"
+
+    /// 运行日志超过该大小时轮转为 run.log.1（只保留 1 份旧日志）
+    private let logRotationSize = 1024 * 1024
+
+    /// 构建期默认的单脚本超时（秒）；插件可用元信息 `timeout` 覆盖
     private let scriptTimeout: TimeInterval = 1.5
+
+    /// 构建响应相对扩展等待上限的余量（秒）：到点仍未返回的插件按超时处理
+    private let responseMargin: TimeInterval = 0.2
 
     /// 超时后发 SIGTERM 到强杀之间的宽限时间（秒）
     private let terminateGrace: TimeInterval = 0.2
@@ -97,7 +106,9 @@ final class PluginService {
             let currentDir = object["currentDir"] as? String ?? ""
             let selected = object["selected"] as? [String] ?? []
 
-            let nodes = buildNodes(currentDir: currentDir, selected: selected)
+            // 响应须在扩展放弃等待前写出，留出序列化与 IPC 的余量
+            let deadline = created.addingTimeInterval(FWIPC.buildTimeout - responseMargin)
+            let nodes = buildNodes(currentDir: currentDir, selected: selected, deadline: deadline)
             let items = serialize(nodes, currentDir: currentDir, selected: selected)
 
             let response: [String: Any] = ["items": items]
@@ -167,14 +178,15 @@ final class PluginService {
     /// 说明：一个插件 = 一个文件夹，文件夹名即插件 id，入口固定 `main.sh`。
     /// 只加载「含 main.sh 的插件文件夹」，顶层散放的 `.sh` 忽略；`enabled=false` 的插件跳过。
     /// 各插件相互独立，改为并行执行以降低 `menu(for:)` 的同步等待时延，结果按文件夹名顺序回填保序。
-    private func buildNodes(currentDir: String, selected: [String]) -> [MenuNode] {
+    /// 到 deadline 仍未返回的插件按超时处理，保证扩展在等待上限内拿到其余插件的菜单。
+    private func buildNodes(currentDir: String, selected: [String], deadline: Date) -> [MenuNode] {
         // 仅加载启用的插件
         let plugins = installedPlugins().filter { $0.metadata.enabled }
 
         guard !plugins.isEmpty else { return [] }
 
-        // 每个插件对应一段节点，按下标回填以保序
-        var perPluginNodes = [[MenuNode]](repeating: [], count: plugins.count)
+        // 每个插件对应一段节点，按下标回填以保序；nil 表示尚未返回
+        var perPluginNodes = [[MenuNode]?](repeating: nil, count: plugins.count)
         let lock = NSLock()
         let group = DispatchGroup()
 
@@ -188,19 +200,18 @@ final class PluginService {
                                       args: [currentDir] + selected,
                                       currentDir: currentDir,
                                       selected: selected,
-                                      timeout: self.scriptTimeout)
+                                      timeout: plugin.metadata.timeout ?? self.scriptTimeout)
 
                 var nodes = PluginOutputParser.parse(result.output)
+                self.resolveImages(in: nodes, pluginFolder: plugin.entryURL.deletingLastPathComponent())
 
-                // 构建期脚本失败/超时：注入一个不可点击的错误提示项（以插件 id 标识）
+                // 构建期脚本失败/超时：写日志，并注入一个点击可查看日志的提示项（以插件 id 标识）
                 if result.timedOut {
-                    nodes.append(MenuNode(
-                        title: "⚠️ \(plugin.id)（执行超时）",
-                        enabled: false))
+                    nodes.append(self.failureNode(title: "⚠️ \(plugin.id)（执行超时）"))
+                    self.appendRunLog(summary: "build plugin=\(plugin.id) 超时", status: result.status, output: result.output)
                 } else if result.status != 0 {
-                    nodes.append(MenuNode(
-                        title: "⚠️ \(plugin.id)（执行失败，退出码 \(result.status)）",
-                        enabled: false))
+                    nodes.append(self.failureNode(title: "⚠️ \(plugin.id)（执行失败，退出码 \(result.status)）"))
+                    self.appendRunLog(summary: "build plugin=\(plugin.id)", status: result.status, output: result.output)
                 }
 
                 lock.lock()
@@ -209,9 +220,31 @@ final class PluginService {
             }
         }
 
-        group.wait()
+        _ = group.wait(wallTimeout: .now() + max(0, deadline.timeIntervalSinceNow))
 
-        return perPluginNodes.flatMap { $0 }
+        lock.lock()
+        let snapshot = perPluginNodes
+        lock.unlock()
+
+        return snapshot.enumerated().flatMap { index, nodes in
+            nodes ?? [failureNode(title: "⚠️ \(plugins[index].id)（执行超时）")]
+        }
+    }
+
+    /// 构建期失败提示项：点击打开 run.log
+    private func failureNode(title: String) -> MenuNode {
+        let logURL = FWIPC.pluginDirectory.appendingPathComponent(Self.logFileName)
+        return MenuNode(title: title, action: .href(logURL.absoluteString))
+    }
+
+    /// 把节点树中的 `image=` 解析为菜单图片数据（需在主 App 侧完成，扩展读不到插件目录）
+    private func resolveImages(in nodes: [MenuNode], pluginFolder: URL) {
+        for node in nodes {
+            if let image = node.image {
+                node.imageData = MenuImageEncoder.encode(image, pluginFolder: pluginFolder)
+            }
+            resolveImages(in: node.children, pluginFolder: pluginFolder)
+        }
     }
 
     /// 把节点树序列化为 JSON，并为可执行叶子登记 actionId
@@ -221,7 +254,11 @@ final class PluginService {
 
             var dict: [String: Any] = ["title": node.title, "enabled": node.enabled]
 
-            if let sfimage = node.sfimage { dict["sfimage"] = sfimage }
+            if let imageData = node.imageData {
+                dict["imageData"] = imageData
+            } else if let sfimage = node.sfimage {
+                dict["sfimage"] = sfimage
+            }
 
             if !node.children.isEmpty {
                 dict["children"] = serialize(node.children, currentDir: currentDir, selected: selected)
@@ -473,11 +510,20 @@ final class PluginService {
         let line = "[\(timestamp)] \(summary) exit=\(status)\n  output=\(snippet)\n\n"
         guard let data = line.data(using: .utf8) else { return }
 
-        logQueue.async {
+        logQueue.async { [logRotationSize] in
             let directory = FWIPC.pluginDirectory
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-            let logURL = directory.appendingPathComponent("run.log")
+            let logURL = directory.appendingPathComponent(Self.logFileName)
+
+            // 超过上限时整体轮转：旧日志改名为 run.log.1（覆盖更早的那份），新日志从空文件开始
+            let size = (try? FileManager.default.attributesOfItem(atPath: logURL.path)[.size]) as? Int ?? 0
+            if size > logRotationSize {
+                let rotatedURL = directory.appendingPathComponent(Self.logFileName + ".1")
+                try? FileManager.default.removeItem(at: rotatedURL)
+                try? FileManager.default.moveItem(at: logURL, to: rotatedURL)
+            }
+
             if let handle = try? FileHandle(forWritingTo: logURL) {
                 handle.seekToEndOfFile()
                 handle.write(data)

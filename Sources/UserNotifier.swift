@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import UserNotifications
 
 /// 轻量系统通知封装
@@ -30,11 +30,12 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// 发送一条系统通知（未授权时系统会静默忽略）
     /// 若与上一条间隔过近，会自动延迟到满足最小间隔后再投递。
-    static func notify(title: String, body: String) {
-        shared.enqueue(title: title, body: body)
+    /// - Parameter openURL: 点击通知时打开的地址，可为空
+    static func notify(title: String, body: String, openURL: URL? = nil) {
+        shared.enqueue(title: title, body: body, openURL: openURL)
     }
 
-    private func enqueue(title: String, body: String) {
+    private func enqueue(title: String, body: String, openURL: URL?) {
         queue.async { [weak self] in
             guard let self = self else { return }
 
@@ -47,6 +48,9 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
+            if let openURL = openURL {
+                content.userInfo = [Self.openURLKey: openURL.absoluteString]
+            }
 
             let request = UNNotificationRequest(identifier: UUID().uuidString,
                                                 content: content,
@@ -61,4 +65,18 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .list, .sound])
     }
+
+    /// 点击通知：带地址的通知打开对应地址（如新版本的下载页）
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        if let string = response.notification.request.content.userInfo[Self.openURLKey] as? String,
+           let url = URL(string: string) {
+            NSWorkspace.shared.open(url)
+        }
+        completionHandler()
+    }
+
+    /// 通知 userInfo 中「点击后打开的地址」的键
+    private static let openURLKey = "openURL"
 }

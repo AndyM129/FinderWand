@@ -69,11 +69,28 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.dev.finder-wand.FinderSync
           # 开发版扩展显示名
-          FW_EXT_DISPLAY_NAME: FinderWand Dev
+          FW_EXT_DISPLAY_NAME: FinderWand-Dev
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.finder-wand.FinderSync
           # 正式版扩展显示名
           FW_EXT_DISPLAY_NAME: FinderWand
+
+  # 单元测试：直接编入被测的纯逻辑源文件，不依赖宿主 App 启动
+  FinderWandTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      - path: Sources/PluginOutputParser.swift
+      - path: Sources/PluginMetadata.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.andym129.finder-wand.tests
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
 
 schemes:
   FinderWand:
@@ -82,5 +99,9 @@ schemes:
         FinderWand: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - FinderWandTests
     archive:
       config: Release

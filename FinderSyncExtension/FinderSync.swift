@@ -68,8 +68,12 @@ class FinderSync: FIFinderSync {
         let currentDir = currentDirectoryPath()
 
         guard let items = requestMenuSpec(currentDir: currentDir, selected: selected) else {
-            // 无响应/超时：主 App 大概率未启动，给出引导文案
-            menu.addItem(placeholderItem(title: "请先启动 FinderWand"))
+            // 无响应/超时：主 App 大概率未启动，给出引导，点击即启动主 App
+            let launchItem = NSMenuItem(title: "请先启动 FinderWand（点击启动）",
+                                        action: #selector(launchHostApp(_:)),
+                                        keyEquivalent: "")
+            launchItem.target = self
+            menu.addItem(launchItem)
             return menu
         }
 
@@ -160,7 +164,7 @@ class FinderSync: FIFinderSync {
             if item["separator"] as? Bool == true {
                 // Finder Sync 右键菜单不支持原生分隔线（NSMenuItem.separator 会显示为空行），
                 // 仅用受支持的 title+enabled 属性，以一行短横线模拟。
-                let separator = NSMenuItem(title: "----------", action: nil, keyEquivalent: "")
+                let separator = NSMenuItem(title: "-------------------", action: nil, keyEquivalent: "")
                 separator.isEnabled = false
                 menu.addItem(separator)
                 continue
@@ -185,8 +189,12 @@ class FinderSync: FIFinderSync {
                 menuItem.isEnabled = false
             }
 
-            // 图标：按当前深浅色着色；禁用项图标同步变暗，与置灰标题一致
-            if let symbol = item["sfimage"] as? String {
+            // 图标：插件图片原样显示；SF Symbol 按当前深浅色着色，禁用项图标同步变暗，与置灰标题一致
+            if let imageData = (item["imageData"] as? String).flatMap({ Data(base64Encoded: $0) }),
+               let image = NSImage(data: imageData) {
+                image.size = NSSize(width: 16, height: 16)
+                menuItem.image = image
+            } else if let symbol = item["sfimage"] as? String {
                 menuItem.image = Self.tintedSymbol(symbol, accessibilityDescription: title, enabled: isEnabled, isDark: isDark)
             }
 
@@ -240,6 +248,19 @@ class FinderSync: FIFinderSync {
     }
 
     // MARK: - 辅助
+
+    /// 启动（或激活）宿主主 App：扩展位于 `<App>.app/Contents/PlugIns/<扩展>.appex`
+    @objc func launchHostApp(_ sender: NSMenuItem) {
+        let appURL = Bundle.main.bundleURL
+            .deletingLastPathComponent() // PlugIns
+            .deletingLastPathComponent() // Contents
+            .deletingLastPathComponent() // <App>.app
+        NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            if let error = error {
+                NSLog("FinderWand 扩展: 启动主 App 失败 \(error.localizedDescription)")
+            }
+        }
+    }
 
     /// 推断「当前所在目录」：目标是目录则取目标，否则取其父目录
     private func currentDirectoryPath() -> String {

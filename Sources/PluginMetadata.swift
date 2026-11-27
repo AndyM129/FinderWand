@@ -39,6 +39,13 @@ struct PluginMetadata {
 
     /// 启用开关：缺省视为 true，仅显式为 false 时禁用
     var enabled: Bool = true
+
+    /// 构建右键菜单时该插件的超时（秒），缺省用宿主默认值；取值会被限制在 `allowedTimeout` 内
+    var timeout: TimeInterval?
+
+    /// 插件可声明的超时范围（秒）
+    /// 上限受右键菜单的整体等待时间约束：扩展最多等 `FWIPC.buildTimeout`（2.5s），需留出进程与 IPC 的余量。
+    static let allowedTimeout: ClosedRange<TimeInterval> = 0.1 ... 2.0
 }
 
 /// 插件元信息解析与缓存
@@ -216,6 +223,11 @@ enum PluginMetadataStore {
         case "authorUrl": metadata.authorUrl = value
         case "minAppVersion": metadata.minAppVersion = value
         case "enabled": metadata.enabled = (value.lowercased() != "false")
+        case "timeout":
+            if let seconds = TimeInterval(value), seconds > 0 {
+                metadata.timeout = min(max(seconds, PluginMetadata.allowedTimeout.lowerBound),
+                                       PluginMetadata.allowedTimeout.upperBound)
+            }
         default: break // 未知 key 忽略，保证向后兼容
         }
     }

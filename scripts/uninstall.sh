@@ -48,8 +48,8 @@ EXT_IDS=(
 )
 ALL_IDS=($APP_IDS $EXT_IDS)
 
-# 含 v1.2.1 之前的旧名称「Finder Wand」，兼容清理旧版安装
-APP_NAMES=("FinderWand" "FinderWand Dev" "Finder Wand" "Finder Wand Dev")
+# 含旧名称「Finder Wand」（v1.2.1 之前）与「FinderWand Dev」（开发版改名为 FinderWand-Dev 之前），兼容清理旧版安装
+APP_NAMES=("FinderWand" "FinderWand-Dev" "FinderWand Dev" "Finder Wand" "Finder Wand Dev")
 
 SCRIPT_DIR="${0:A:h}"
 ROOT="${SCRIPT_DIR:h}"
@@ -76,6 +76,7 @@ typeset -a targets
 
 # 安装的 App
 targets+=( /Applications/"FinderWand.app"(N) )
+targets+=( /Applications/"FinderWand-Dev.app"(N) )
 targets+=( /Applications/"FinderWand Dev.app"(N) )
 targets+=( /Applications/"Finder Wand.app"(N) )
 targets+=( /Applications/"Finder Wand Dev.app"(N) )

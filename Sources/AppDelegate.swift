@@ -15,5 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserNotifier.shared.configure()
         // 首次运行默认开启开机自启
         LoginItemManager.shared.enableOnFirstRunIfNeeded()
+        // 自动静默检查更新，发现新版本时通知
+        UpdateChecker.shared.startAutomaticChecks()
     }
 }

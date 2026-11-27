@@ -98,7 +98,7 @@
 
 - 品牌图标：App 图标与菜单栏模板图标使用品牌图，菜单栏图标随系统深浅色自适应。
 - 右键占位引导：主 App 未运行（扩展请求无响应）时，右键显示「请先启动 FinderWand」引导；主 App 在运行但无插件可显示项时，显示「FinderWand（无可用菜单）」。
-- 开发版与正式版区分：扩展显示名按构建配置区分（开发版「FinderWand Dev」、正式版「FinderWand」），避免在系统「登录项与扩展」里混淆。
+- 开发版与正式版区分：扩展显示名按构建配置区分（开发版「FinderWand-Dev」、正式版「FinderWand」），避免在系统「登录项与扩展」里混淆。
 - 插件目录属用户数据：`~/.config/FinderWand/` 下的内容（插件、日志等）为用户数据，程序不得擅自覆盖用户手改的内容。
 
 # 4、工程配置
@@ -112,7 +112,7 @@
   - 开发版：
     - target：Debug
     - BundleID：`io.github.andym129.dev.finder-wand`
-    - APP Name：FinderWand Dev
+    - APP Name：FinderWand-Dev
   - 正式版：
     - target：Release
     - BundleID：`io.github.andym129.finder-wand`

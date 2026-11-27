@@ -16,6 +16,44 @@ final class UpdateChecker {
 
     static let shared = UpdateChecker()
 
+    /// 启动后首次自动检查的延迟（秒），避开开机时网络尚未就绪
+    private let initialCheckDelay: TimeInterval = 30
+
+    /// 自动检查的间隔（秒）：App 常驻菜单栏，每天检查一次
+    private let checkInterval: TimeInterval = 24 * 60 * 60
+
+    /// 已提醒过的最新版本（UserDefaults 键），同一版本只提醒一次
+    private let notifiedVersionKey = "FWLastNotifiedUpdateVersion"
+
+    private var timer: Timer?
+
+    /// 开始自动静默检查：发现新版本时发一条系统通知（点击打开下载地址），已是最新或失败时不打扰
+    /// 本地开发构建（channel 为 dev）版本号不代表发布版本，不做自动检查。
+    func startAutomaticChecks() {
+        guard AppInfo.channel != "dev" else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + initialCheckDelay) { [weak self] in
+            guard let self = self else { return }
+
+            self.checkSilently()
+            self.timer = Timer.scheduledTimer(withTimeInterval: self.checkInterval, repeats: true) { [weak self] _ in
+                self?.checkSilently()
+            }
+        }
+    }
+
+    private func checkSilently() {
+        check { [weak self] result in
+            guard let self = self, case let .updateAvailable(version, _, downloadURL, pageURL) = result else { return }
+            guard UserDefaults.standard.string(forKey: self.notifiedVersionKey) != version else { return }
+
+            UserDefaults.standard.set(version, forKey: self.notifiedVersionKey)
+            UserNotifier.notify(title: "FinderWand 有新版本 v\(version)",
+                                body: "点击下载安装包，也可在菜单栏「检查更新」查看更新说明。",
+                                openURL: downloadURL ?? pageURL)
+        }
+    }
+
     /// 检查更新，结果回调在主线程
     func check(completion: @escaping (UpdateCheckResult) -> Void) {
         var request = URLRequest(url: AppInfo.latestReleaseAPI)
