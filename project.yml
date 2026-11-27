@@ -84,6 +84,7 @@ targets:
       - path: Sources/PluginOutputParser.swift
       - path: Sources/PluginMetadata.swift
       - path: Sources/ReleaseNotesView.swift
+      - path: Sources/GitHubRepo.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

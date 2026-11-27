@@ -47,7 +47,7 @@ enum PluginInstaller {
 
     /// 从指定 GitHub 仓库拉取整仓，落地文件夹名为仓库名
     static func fetchFromRepo(input rawInput: String) -> FetchResult {
-        guard let (owner, repo) = parseRepo(rawInput) else {
+        guard let (owner, repo) = GitHubRepo.parse(rawInput) else {
             return .failure("仓库地址不合法，请输入 owner/repo 或完整 GitHub 地址")
         }
 
@@ -201,33 +201,12 @@ enum PluginInstaller {
         return contents.isEmpty
     }
 
-    /// 解析仓库输入：支持 `owner/repo` 或 `https://github.com/owner/repo(.git)`
-    private static func parseRepo(_ raw: String) -> (owner: String, repo: String)? {
-        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty { return nil }
-
-        // 去掉协议与主机
-        if let range = text.range(of: "github.com/") {
-            text = String(text[range.upperBound...])
-        }
-        // 去掉查询/锚点
-        text = text.components(separatedBy: CharacterSet(charactersIn: "?#")).first ?? text
-
-        let parts = text.split(separator: "/").map(String.init)
-        guard parts.count >= 2 else { return nil }
-
-        let owner = parts[0]
-        var repo = parts[1]
-        if repo.hasSuffix(".git") { repo = String(repo.dropLast(4)) }
-
-        guard !owner.isEmpty, !repo.isEmpty else { return nil }
-
-        return (owner, repo)
-    }
-
     /// 取仓库默认分支（未鉴权 API）
     private static func fetchDefaultBranch(owner: String, repo: String) -> (branch: String?, error: String?) {
-        let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)")!
+        guard let url = GitHubRepo.apiURL(owner: owner, repo: repo) else {
+            return (nil, "仓库地址不合法，请输入 owner/repo 或完整 GitHub 地址")
+        }
+
         var request = URLRequest(url: url)
         request.setValue("FinderWand", forHTTPHeaderField: "User-Agent")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -271,7 +250,10 @@ enum PluginInstaller {
 
     /// 下载指定仓库分支的 tarball 到文件；成功返回 nil，失败返回错误说明。
     private static func downloadTarball(owner: String, repo: String, branch: String, to file: URL) -> String? {
-        let url = URL(string: "https://codeload.github.com/\(owner)/\(repo)/tar.gz/refs/heads/\(branch)")!
+        guard let url = GitHubRepo.tarballURL(owner: owner, repo: repo, branch: branch) else {
+            return "下载失败: 仓库或分支名不合法（\(owner)/\(repo)@\(branch)）"
+        }
+
         var request = URLRequest(url: url)
         request.setValue("FinderWand", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 60
