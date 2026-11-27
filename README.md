@@ -107,8 +107,10 @@ FinderWand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右键
 - 前导 `--` 对表示层级：无前缀为一级，`--` 为二级，`----` 为三级，依此类推。
 - 纯 `-` 且长度不小于 3 的行是分隔线。
 - 标题与参数用 ` | ` 分隔，参数为 `key=value`（value 可用双引号包裹）：
-  - `bash=<可执行>` 配合 `param0..paramN=<参数>`：点击后台执行命令。
-  - `terminal=true`：改为在「终端」中运行（可见输出）。
+  - `bash=<可执行>` 配合 `param0..paramN=<参数>`：点击后台执行命令。退出码非 0 时发系统通知（点击打开 `run.log`）。
+  - `notify=false`：后台执行失败时不发系统通知。
+  - `terminal=true`：改为在终端中运行（可见输出），用哪个终端按菜单栏「终端应用」设置（终端 / iTerm）。
+  - `terminal=iterm` / `terminal=terminal`：固定在 iTerm / 系统「终端」中运行，不看菜单栏设置。选中的终端未安装时用系统「终端」。
   - `href=<url>`：点击打开链接。
   - `disabled=true`：不可点击（置灰）。
   - `sfimage=<SF Symbol 名>`：菜单项图标（随深浅色自动着色）。
@@ -132,7 +134,7 @@ FinderWand（访达的魔杖）是一款 macOS 菜单栏 App，在 Finder 右键
 
 ## 6.1、环境准备
 
-- macOS 14+、Xcode 26（本机 `xcode-select` 可能指向 CommandLineTools，`scripts/build.sh` 会自动探测并显式指定 `Xcode.app`）。
+- macOS 14+、Xcode 26 或更新（`scripts/build.sh` 未设 `DEVELOPER_DIR` 时用 `xcode-select` 指向的 Xcode；指向 CommandLineTools 时取 `/Applications` 下版本最高的 `Xcode*.app`，也可自行设 `DEVELOPER_DIR` 指定）。
 - 需安装 XcodeGen：`brew install xcodegen`（工程文件由 `project.yml` 生成，不手动维护 `.xcodeproj`）。
 - 代码补全（SourceKit-LSP）依赖 `buildServer.json`，由构建产物自动生成。
 

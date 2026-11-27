@@ -25,15 +25,8 @@ APP_NAME="FinderWand"
 DERIVED_DATA="$ROOT/.build/DerivedData"
 DIST="$ROOT/.build/dist"
 
-# 探测 Xcode（本机 xcode-select 指向 CommandLineTools）
-if [[ -z "${DEVELOPER_DIR:-}" ]]; then
-  for xc in "/Applications/Xcode 26.6.app" "/Applications/Xcode 26.1.1.app" "/Applications/Xcode.app"; do
-    if [[ -d "$xc" ]]; then
-      export DEVELOPER_DIR="$xc/Contents/Developer"
-      break
-    fi
-  done
-fi
+# 选择 Xcode（未显式设置 DEVELOPER_DIR 时自动选择，规则见 select-xcode.sh）
+source "$SCRIPT_DIR/select-xcode.sh"
 
 GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 TIMESTAMP="$(date +%Y%m%d%H%M%S)"

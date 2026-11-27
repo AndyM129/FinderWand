@@ -83,6 +83,7 @@ targets:
       - path: Tests
       - path: Sources/PluginOutputParser.swift
       - path: Sources/PluginMetadata.swift
+      - path: Sources/ReleaseNotesView.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

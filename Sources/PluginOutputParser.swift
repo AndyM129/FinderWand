@@ -1,9 +1,41 @@
 import Foundation
 
+/// 在哪个终端里运行命令（`terminal=` 参数）
+enum TerminalChoice: Equatable {
+    /// `terminal=true`：按菜单栏「终端应用」设置
+    case followSetting
+    /// `terminal=terminal`：固定用系统「终端」
+    case terminal
+    /// `terminal=iterm`：固定用 iTerm
+    case iterm
+
+    /// 解析 `terminal=` 的值；不识别的值（含 `false`）视为后台执行
+    init?(parameter: String?) {
+        switch parameter?.lowercased() {
+        case "true": self = .followSetting
+        case "terminal": self = .terminal
+        case "iterm": self = .iterm
+        default: return nil
+        }
+    }
+}
+
+/// 点击执行的命令
+struct BashCommand {
+    /// 可执行文件路径
+    let path: String
+    /// 顺序参数（param0..paramN）
+    let args: [String]
+    /// 在终端中运行时为终端选择；nil 表示后台静默执行
+    let terminal: TerminalChoice?
+    /// 后台执行失败（退出码非 0）时是否发系统通知；`notify=false` 关闭
+    let notifyOnFailure: Bool
+}
+
 /// 菜单项动作
 enum PluginAction {
-    /// 执行命令：可执行文件路径 + 参数 + 是否在终端中运行
-    case bash(path: String, args: [String], terminal: Bool)
+    /// 执行命令
+    case bash(BashCommand)
     /// 打开链接
     case href(String)
 }
@@ -25,6 +57,9 @@ final class MenuNode {
     /// 解析后的菜单图标 PNG 数据（base64），由主 App 按 `image` 生成后传给扩展
     var imageData: String?
 
+    /// 所属插件的显示名，由主 App 构建时填入，用于失败通知
+    var pluginName: String?
+
     init(title: String, isSeparator: Bool = false, enabled: Bool = true, action: PluginAction? = nil) {
         self.title = title
         self.isSeparator = isSeparator
@@ -41,7 +76,9 @@ final class MenuNode {
 ///   - 纯 `-` 且长度 ≥3 的行是分隔线；`---` 为一级分隔线，`-----` 为二级，依此类推。
 ///   - 标题与参数用 ` | ` 分隔，参数为 `key=value`（value 可用双引号包裹）：
 ///       - `bash=<可执行路径>`（或 `shell=`）与 `param0..paramN=<arg>` 表示点击执行的命令与参数。
-///       - `terminal=true` 表示在终端中运行（可见输出），默认后台静默执行。
+///       - `terminal=true` 表示在终端中运行（可见输出），用哪个终端按菜单栏「终端应用」设置；
+///         `terminal=iterm` / `terminal=terminal` 固定用 iTerm / 系统「终端」。默认后台静默执行。
+///       - `notify=false` 表示后台执行失败时不发系统通知（默认退出码非 0 时通知）。
 ///       - `href=<url>` 表示点击打开链接。
 ///       - `disabled=true` 表示不可点击（置灰）。
 ///       - `sfimage=<SF Symbol 名>` 为菜单项加图标（图标会按当前深浅色着色）。
@@ -104,9 +141,10 @@ enum PluginOutputParser {
         if let href = params["href"] {
             node.action = .href(href)
         } else if let bash = params["bash"] ?? params["shell"] {
-            node.action = .bash(path: bash,
-                                args: collectPositionalParams(params),
-                                terminal: params["terminal"] == "true")
+            node.action = .bash(BashCommand(path: bash,
+                                            args: collectPositionalParams(params),
+                                            terminal: TerminalChoice(parameter: params["terminal"]),
+                                            notifyOnFailure: params["notify"] != "false"))
         }
 
         return node

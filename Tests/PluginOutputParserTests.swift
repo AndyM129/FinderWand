@@ -41,26 +41,43 @@ final class PluginOutputParserTests: XCTestCase {
     func testBashActionWithParamsAndTerminal() {
         let nodes = PluginOutputParser.parse(#"运行 | bash="/tmp/my script.sh" param0=--flag param1="a b" terminal=true"#)
 
-        guard case let .bash(path, args, terminal)? = nodes.first?.action else {
+        guard case let .bash(command)? = nodes.first?.action else {
             return XCTFail("应解析为 bash 动作")
         }
 
         XCTAssertEqual(nodes.first?.title, "运行")
-        XCTAssertEqual(path, "/tmp/my script.sh")
-        XCTAssertEqual(args, ["--flag", "a b"])
-        XCTAssertTrue(terminal)
+        XCTAssertEqual(command.path, "/tmp/my script.sh")
+        XCTAssertEqual(command.args, ["--flag", "a b"])
+        XCTAssertEqual(command.terminal, .followSetting)
+        XCTAssertTrue(command.notifyOnFailure)
     }
 
     func testShellAliasAndPositionalParamsStopAtGap() {
         let nodes = PluginOutputParser.parse("X | shell=/bin/echo param0=a param2=c")
 
-        guard case let .bash(path, args, terminal)? = nodes.first?.action else {
+        guard case let .bash(command)? = nodes.first?.action else {
             return XCTFail("应解析为 bash 动作")
         }
 
-        XCTAssertEqual(path, "/bin/echo")
-        XCTAssertEqual(args, ["a"])
-        XCTAssertFalse(terminal)
+        XCTAssertEqual(command.path, "/bin/echo")
+        XCTAssertEqual(command.args, ["a"])
+        XCTAssertNil(command.terminal)
+    }
+
+    func testTerminalChoiceAndNotify() {
+        let nodes = PluginOutputParser.parse("""
+        A | bash=/bin/echo terminal=iterm
+        B | bash=/bin/echo terminal=Terminal
+        C | bash=/bin/echo terminal=false notify=false
+        """)
+
+        let commands: [BashCommand] = nodes.compactMap {
+            if case let .bash(command)? = $0.action { return command }
+            return nil
+        }
+
+        XCTAssertEqual(commands.map(\.terminal), [.iterm, .terminal, nil])
+        XCTAssertEqual(commands.map(\.notifyOnFailure), [true, true, false])
     }
 
     func testHrefDisabledAndIcons() {

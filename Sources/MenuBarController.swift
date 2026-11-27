@@ -75,6 +75,8 @@ final class MenuBarController: NSObject {
         launchItem.state = LoginItemManager.shared.isEnabled ? .on : .off
         menu.addItem(launchItem)
 
+        menu.addItem(terminalAppMenuItem())
+
         menu.addItem(actionItem(title: "关于 FinderWand",
                                 action: #selector(openAbout)))
 
@@ -547,7 +549,12 @@ final class MenuBarController: NSObject {
 
         case let .updateAvailable(version, notes, downloadURL, pageURL):
             alert.messageText = "发现新版本 v\(version)"
-            alert.informativeText = notes.isEmpty ? "有可用更新。" : notes
+            if notes.isEmpty {
+                alert.informativeText = "有可用更新。"
+            } else {
+                alert.informativeText = "更新说明："
+                alert.accessoryView = ReleaseNotesView.make(markdown: notes)
+            }
             alert.addButton(withTitle: downloadURL != nil ? "下载安装包" : "打开发布页")
             alert.addButton(withTitle: "查看发布页")
             alert.addButton(withTitle: "取消")
@@ -565,6 +572,35 @@ final class MenuBarController: NSObject {
     /// 切换开机自动运行
     @objc private func toggleLaunchAtLogin() {
         LoginItemManager.shared.toggle()
+        if let menu = statusItem.menu { populateMenu(menu) }
+    }
+
+    /// 「终端应用」子菜单：插件写 `terminal=true` 时用哪个终端运行，未安装的终端置灰
+    private func terminalAppMenuItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "终端应用：\(TerminalApp.preferred.displayName)", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+
+        for app in TerminalApp.allCases {
+            let installed = app.isInstalled
+            let item = NSMenuItem(title: installed ? app.displayName : "\(app.displayName)（未安装）",
+                                  action: installed ? #selector(selectTerminalApp(_:)) : nil,
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = app.rawValue
+            item.state = app == TerminalApp.preferred ? .on : .off
+            item.isEnabled = installed
+            submenu.addItem(item)
+        }
+
+        parent.submenu = submenu
+        return parent
+    }
+
+    /// 选择插件 `terminal=true` 时使用的终端
+    @objc private func selectTerminalApp(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let app = TerminalApp(rawValue: raw) else { return }
+
+        TerminalApp.preferred = app
         if let menu = statusItem.menu { populateMenu(menu) }
     }
 

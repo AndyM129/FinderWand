@@ -8,7 +8,15 @@
 
 ## 1.1、新增
 
-- 暂无。
+- 后台动作执行失败（退出码非 0）时发系统通知，显示插件名、菜单项标题和输出首行，点击打开 `run.log`；菜单项写 `notify=false` 可关闭。
+- 终端支持 iTerm：菜单栏新增「终端应用」（终端 / iTerm），`terminal=true` 按该设置打开；插件也可写 `terminal=iterm` 或 `terminal=terminal` 固定终端。选中的终端未安装时用系统「终端」。
+
+## 1.2、变更
+
+- 检查更新弹窗里的更新说明按 Markdown 渲染（标题、列表、粗体、代码、链接），显示在可滚动的文本区里，不再显示原始 Markdown。
+- 终端动作的结果写入 `run.log` 时带上实际使用的终端与 osascript 退出码，没有自动化权限等失败可在日志里看到。
+- `scripts/build.sh`、`scripts/package-dmg.sh` 不再写死 Xcode 路径：已设 `DEVELOPER_DIR` 时照用，否则用 `xcode-select` 指向的 Xcode，指向 CommandLineTools 时取 `/Applications` 下版本最高的 `Xcode*.app`（逻辑在 `scripts/select-xcode.sh`）。
+- 单元测试补充 `terminal=` 与 `notify=` 解析、更新说明渲染。
 
 # 2、历史版本
 

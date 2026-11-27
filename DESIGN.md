@@ -25,7 +25,8 @@
 - 脚本执行为并行（`DispatchQueue(concurrent)` + `DispatchGroup`），结果按文件名顺序回填保序；构建期单脚本超时默认 1.5s，插件可用元信息 `timeout` 改为 0.1 ~ 2.0s（先 SIGTERM，0.2s 后仍未退出则 SIGKILL）。主 App 在请求创建后 2.3s 截止，到点仍未返回的插件按超时处理，保证扩展 2.5s 内拿到其余插件的菜单。
 - 构建期失败提示：超时显示「⚠️ <插件 id>（执行超时）」，非 0 退出码显示「⚠️ <插件 id>（执行失败，退出码 N）」，并把输出写入 `run.log`；点击提示项打开 `run.log`。
 - 运行日志 `run.log` 超过 1MB 时改名为 `run.log.1`（覆盖更早的那份），只保留 1 份旧日志，总大小不超过约 2MB。
-- 后台动作（`bash=` 且非 `terminal=true`）不设超时，运行到脚本自行结束。
+- 后台动作（`bash=` 且未设 `terminal=`）不设超时，运行到脚本自行结束；退出码非 0 时发系统通知（标题含插件名与菜单项标题，正文为输出首行，点击打开 `run.log`），菜单项写 `notify=false` 时不通知。
+- 终端动作：`terminal=true` 按菜单栏「终端应用」设置（UserDefaults `FWTerminalApp`，缺省系统「终端」）；`terminal=iterm` / `terminal=terminal` 固定终端；选中的终端未安装时用系统「终端」。主 App 用 `/usr/bin/osascript` 发 AppleScript：「终端」用 `do script`，iTerm 用 `create tab` + `write text`；osascript 的退出码与输出写入 `run.log`。
 - 脚本输出边执行边读取，输出超过管道缓冲（约 64KB）不会写阻塞；脚本退出后最多再等 0.2s 读完输出，后台子进程继续持有管道时不阻塞菜单构建。
 - 入口脚本已有执行权限时不再改写权限。
 - 占位文案：请求无响应/超时显示「请先启动 FinderWand（点击启动）」，点击后扩展用 `NSWorkspace.openApplication` 启动宿主 App（扩展所在的 `<App>.app`）；有响应但无菜单项显示「FinderWand（无可用菜单）」。
@@ -38,7 +39,7 @@
 ## 2.5、插件协议（xbar 精简子集，现状）
 
 - 每行一个菜单项；前导 `--` 对表示层级；纯 `-`（>=3）为分隔线；`标题 | key=value`。
-- 支持参数：`bash=` / `paramN=`、`terminal=true`、`href=`、`disabled=true`、`sfimage=`、`image=`。
+- 支持参数：`bash=` / `paramN=`、`terminal=true|iterm|terminal`、`notify=false`、`href=`、`disabled=true`、`sfimage=`、`image=`。
 - `image=`：插件文件夹内的相对路径（拒绝 `..` 与绝对路径），或 base64 图片数据（兼容 xbar）。扩展在沙箱里读不到插件目录，由主 App 缩放为 16pt（2x 像素）PNG、base64 传给扩展，按「文件夹 + 取值 + mtime」缓存；原样显示不着色，与 `sfimage=` 同时给出时用 `image=`。
 - 脚本不输出任何行即不显示，可用于条件显示/隐藏。
 

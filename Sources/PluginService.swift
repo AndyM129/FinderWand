@@ -51,6 +51,9 @@ final class PluginService {
         let action: PluginAction
         let currentDir: String
         let selected: [String]
+        /// 菜单项标题与所属插件名，用于失败通知
+        let title: String
+        let pluginName: String?
     }
 
     /// 开始监听扩展的 Darwin 通知
@@ -203,7 +206,9 @@ final class PluginService {
                                       timeout: plugin.metadata.timeout ?? self.scriptTimeout)
 
                 var nodes = PluginOutputParser.parse(result.output)
-                self.resolveImages(in: nodes, pluginFolder: plugin.entryURL.deletingLastPathComponent())
+                self.prepare(nodes,
+                             pluginFolder: plugin.entryURL.deletingLastPathComponent(),
+                             pluginName: plugin.metadata.title ?? plugin.id)
 
                 // 构建期脚本失败/超时：写日志，并注入一个点击可查看日志的提示项（以插件 id 标识）
                 if result.timedOut {
@@ -237,13 +242,14 @@ final class PluginService {
         return MenuNode(title: title, action: .href(logURL.absoluteString))
     }
 
-    /// 把节点树中的 `image=` 解析为菜单图片数据（需在主 App 侧完成，扩展读不到插件目录）
-    private func resolveImages(in nodes: [MenuNode], pluginFolder: URL) {
+    /// 补齐节点树的主 App 侧信息：把 `image=` 解析为菜单图片数据（扩展读不到插件目录），并记下所属插件名
+    private func prepare(_ nodes: [MenuNode], pluginFolder: URL, pluginName: String) {
         for node in nodes {
+            node.pluginName = pluginName
             if let image = node.image {
                 node.imageData = MenuImageEncoder.encode(image, pluginFolder: pluginFolder)
             }
-            resolveImages(in: node.children, pluginFolder: pluginFolder)
+            prepare(node.children, pluginFolder: pluginFolder, pluginName: pluginName)
         }
     }
 
@@ -263,17 +269,21 @@ final class PluginService {
             if !node.children.isEmpty {
                 dict["children"] = serialize(node.children, currentDir: currentDir, selected: selected)
             } else if let action = node.action, node.enabled {
-                dict["actionId"] = registerAction(action, currentDir: currentDir, selected: selected)
+                dict["actionId"] = registerAction(StoredAction(action: action,
+                                                               currentDir: currentDir,
+                                                               selected: selected,
+                                                               title: node.title,
+                                                               pluginName: node.pluginName))
             }
 
             return dict
         }
     }
 
-    private func registerAction(_ action: PluginAction, currentDir: String, selected: [String]) -> Int {
+    private func registerAction(_ stored: StoredAction) -> Int {
         let id = nextActionId
         nextActionId += 1
-        actions[id] = StoredAction(action: action, currentDir: currentDir, selected: selected)
+        actions[id] = stored
 
         // 简单裁剪，避免无限增长
         if actions.count > 500 {
@@ -321,34 +331,63 @@ final class PluginService {
             }
             appendRunLog(summary: "href=\(urlString)", status: 0, output: "")
 
-        case .bash(let path, let args, let terminal):
-            if terminal {
-                runInTerminal(path: path, args: args, currentDir: stored.currentDir, selected: stored.selected)
-                appendRunLog(summary: "terminal bash=\(path) args=\(args.joined(separator: " "))",
-                             status: 0,
-                             output: "已在终端中打开")
+        case .bash(let command):
+            let summary = "bash=\(command.path) args=\(command.args.joined(separator: " "))"
+            if let choice = command.terminal {
+                let app = TerminalApp.resolve(choice)
+                let result = runInTerminal(app: app,
+                                           path: command.path,
+                                           args: command.args,
+                                           currentDir: stored.currentDir,
+                                           selected: stored.selected)
+                appendRunLog(summary: "terminal(\(app.rawValue)) \(summary)",
+                             status: result.status,
+                             output: result.status == 0 ? "已在\(app.displayName)中打开" : result.output)
             } else {
                 // 后台动作不在右键热路径上，不设超时，运行到脚本自行结束（耗时的 AppleScript 等不会被中途杀掉）
-                let result = run(executable: path,
-                                 args: args,
+                let result = run(executable: command.path,
+                                 args: command.args,
                                  currentDir: stored.currentDir,
                                  selected: stored.selected,
                                  timeout: nil)
-                appendRunLog(summary: "bash=\(path) args=\(args.joined(separator: " "))",
-                             status: result.status,
-                             output: result.output)
+                appendRunLog(summary: summary, status: result.status, output: result.output)
+
+                if result.status != 0, command.notifyOnFailure {
+                    notifyActionFailure(stored, status: result.status, output: result.output)
+                }
             }
         }
     }
 
-    /// 在 Terminal 中运行命令：对齐旧版实现，用独立的 /usr/bin/osascript 进程发送
-    /// `tell application "Terminal" ... do script <命令行>`，把真实命令行直接送进终端执行。
+    /// 后台动作失败：发系统通知，点击打开 run.log
+    private func notifyActionFailure(_ stored: StoredAction, status: Int32, output: String) {
+        let name = stored.pluginName.map { "「\($0)」" } ?? ""
+        let firstLine = output
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty }
+        let detail = firstLine.map { String($0.prefix(120)) } ?? "点击查看 run.log"
+        let logURL = FWIPC.pluginDirectory.appendingPathComponent(Self.logFileName)
+
+        UserNotifier.notify(title: "⚠️ 插件\(name)「\(stored.title)」执行失败（退出码 \(status)）",
+                            body: detail,
+                            openURL: logURL)
+    }
+
+    /// 在终端中运行命令：用独立的 /usr/bin/osascript 进程让终端执行真实命令行
+    /// （系统「终端」用 `do script`，iTerm 用 `write text`，见 `TerminalApp.appleScript`）。
     ///
     /// 相比临时 .command 包装脚本的优点：
     /// - 终端里显示并执行的就是真实命令行（含环境变量与脚本调用），而非一个临时脚本路径；
-    /// - `do script` 执行完命令后 shell 仍是交互式，用户可继续输入，无需再 `exec` 顶替；
+    /// - 执行完命令后 shell 仍是交互式，用户可继续输入，无需再 `exec` 顶替；
     /// - 用独立 osascript 二进制而非进程内 NSAppleScript，规避 ad-hoc 签名下自动化静默失败。
-    private func runInTerminal(path: String, args: [String], currentDir: String, selected: [String]) {
+    ///
+    /// 等 osascript 结束再返回，便于把「没有自动化权限」等失败写进 run.log。
+    private func runInTerminal(app: TerminalApp,
+                               path: String,
+                               args: [String],
+                               currentDir: String,
+                               selected: [String]) -> RunResult {
         // 组装命令行：先 cd 到目标目录，再以「环境变量前缀 + 脚本调用」形式执行。
         // 各段用 " \\\n"（空格 + 反斜杠 + 换行）连接成 shell 续行，便于在终端里分行展示。
         var segments: [String] = []
@@ -373,29 +412,11 @@ final class PluginService {
             .replacingOccurrences(of: "\n", with: "\\n")
             + "\""
 
-        let appleScript = """
-        set commandLine to \(asStringLiteral)
-        if application "Terminal" is running then
-            tell application "Terminal"
-                activate
-                do script commandLine
-            end tell
-        else
-            tell application "Terminal"
-                activate
-                do script commandLine in window 1
-            end tell
-        end if
-        """
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", appleScript]
-        do {
-            try process.run()
-        } catch {
-            NSLog("在终端运行失败: \(error.localizedDescription)")
-        }
+        return run(executable: "/usr/bin/osascript",
+                   args: ["-e", app.appleScript(commandLiteral: asStringLiteral)],
+                   currentDir: "",
+                   selected: [],
+                   timeout: nil)
     }
 
     /// shell 单引号安全转义
