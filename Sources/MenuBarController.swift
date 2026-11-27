@@ -46,7 +46,7 @@ final class MenuBarController: NSObject {
     }
 
     /// 填充下拉菜单（清空后重建），每次菜单打开前调用以保证动态信息实时
-    /// 菜单项：打开插件目录、已安装插件、安装插件、新建插件、分割线、版本号、检查更新、开机自动运行、关于、分割线、退出。
+    /// 菜单项：打开插件目录、已安装插件、安装插件、新建插件、分割线、检查更新、开机自动运行、终端应用、关于（带版本号）、分割线、退出。
     private func populateMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
@@ -70,10 +70,6 @@ final class MenuBarController: NSObject {
 
         menu.addItem(.separator())
 
-        // 版本号：点击打开当前版本的 Release 页
-        menu.addItem(actionItem(title: AppInfo.displayVersion,
-                                action: #selector(openReleasePage)))
-
         menu.addItem(actionItem(title: "检查更新",
                                 action: #selector(checkForUpdates)))
 
@@ -85,7 +81,8 @@ final class MenuBarController: NSObject {
 
         menu.addItem(terminalAppMenuItem())
 
-        menu.addItem(actionItem(title: "关于 FinderWand",
+        // 关于：标题带版本号，如「关于 FinderWand (v1.5.1)」，点击打开 GitHub 仓库主页
+        menu.addItem(actionItem(title: "关于 FinderWand (\(AppInfo.aboutVersion))",
                                 action: #selector(openAbout)))
 
         menu.addItem(.separator())
@@ -523,11 +520,6 @@ final class MenuBarController: NSObject {
     /// 关于：在浏览器打开项目 GitHub 主页
     @objc private func openAbout() {
         NSWorkspace.shared.open(AppInfo.repositoryURL)
-    }
-
-    /// 版本号：在浏览器打开当前版本的 Release 页
-    @objc private func openReleasePage() {
-        NSWorkspace.shared.open(AppInfo.releaseURL)
     }
 
     /// 检查更新：查询 GitHub 最新正式版并提示

@@ -101,6 +101,7 @@
 - 「打开插件目录」会先 `createDirectory(withIntermediateDirectories:)` 再用 `NSWorkspace` 打开，目录不存在时自动创建。已验证可正常创建并打开 `~/.config/FinderWand`。
 - 「当前版本号」改为可点击，点击打开当前版本对应的 Release 页（`releaseTag`：正式版 `vX.Y.Z`，测试版 `vX.Y.Z-beta-<短哈希>-<时间戳>`；本地开发无对应 tag，改为打开 Releases 列表页）。
 - 「关于」打开仓库主页 `https://github.com/AndyM129/FinderWand`（PRD 已同步修正为「仓库主页」）。
+- 2026-11-27 调整：单独的版本号菜单项并入「关于」，标题改为「关于 FinderWand (vX.Y.Z)」（`AppInfo.aboutVersion`：正式版 `v1.5.1`，测试版 `v1.5.1 beta-<短哈希>`，本地开发 `v1.5.1 dev`），点击仍打开仓库主页；原「点击版本号打开当前版本 Release 页」入口随之移除。
 - Debug 配置 `BUILD SUCCEEDED`。
 
 ## 2.4、M3：Finder 右键菜单核心能力（状态：已完成）

@@ -57,6 +57,21 @@ enum AppInfo {
         }
     }
 
+    /// 菜单「关于」标题里括号内的版本描述（放进半角括号，内部不再嵌套括号）
+    /// - 正式版：`v0.1.0`
+    /// - 测试版：`v0.1.0 beta-<短哈希>`
+    /// - 本地开发：`v0.1.0 dev`
+    static var aboutVersion: String {
+        switch channel {
+        case "stable":
+            return "v\(shortVersion)"
+        case "beta":
+            return "v\(shortVersion) beta-\(gitCommit)"
+        default:
+            return "v\(shortVersion) dev"
+        }
+    }
+
     /// 当前版本对应的 Release tag
     /// - 正式版：`v0.1.0`
     /// - 测试版：`v0.1.0-beta-<短哈希>-<时间戳>`（与打包脚本产出的 tag 一致）
