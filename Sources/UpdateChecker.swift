@@ -1,17 +1,31 @@
 import Foundation
 
+/// 新版本信息
+struct UpdateInfo {
+    /// 版本号，如 1.4.0
+    let version: String
+    /// 更新说明（Markdown）
+    let notes: String
+    /// dmg 安装包下载地址
+    let downloadURL: URL?
+    /// dmg 对应的 .sha256 校验文件地址
+    let checksumURL: URL?
+    /// Release 页地址
+    let pageURL: URL
+}
+
 /// 检查更新结果
 enum UpdateCheckResult {
     /// 已是最新
     case upToDate
     /// 有新版本
-    case updateAvailable(version: String, notes: String, downloadURL: URL?, pageURL: URL)
+    case updateAvailable(UpdateInfo)
     /// 检查失败
     case failed(String)
 }
 
-/// 轻量更新检查：查询 GitHub 最新正式版 Release，与当前版本比对
-/// 不做自动下载安装，仅提示并引导用户下载安装包或打开 Release 页。
+/// 更新检查：查询 GitHub 最新正式版 Release，与当前版本比对。
+/// 有新版本时可交给 `UpdateInstaller` 一键下载安装。
 final class UpdateChecker {
 
     static let shared = UpdateChecker()
@@ -27,7 +41,7 @@ final class UpdateChecker {
 
     private var timer: Timer?
 
-    /// 开始自动静默检查：发现新版本时发一条系统通知（点击打开下载地址），已是最新或失败时不打扰
+    /// 开始自动静默检查：发现新版本时发一条系统通知（点击后弹出更新窗口），已是最新或失败时不打扰
     /// 本地开发构建（channel 为 dev）版本号不代表发布版本，不做自动检查。
     func startAutomaticChecks() {
         guard AppInfo.channel != "dev" else { return }
@@ -44,13 +58,13 @@ final class UpdateChecker {
 
     private func checkSilently() {
         check { [weak self] result in
-            guard let self = self, case let .updateAvailable(version, _, downloadURL, pageURL) = result else { return }
-            guard UserDefaults.standard.string(forKey: self.notifiedVersionKey) != version else { return }
+            guard let self = self, case let .updateAvailable(update) = result else { return }
+            guard UserDefaults.standard.string(forKey: self.notifiedVersionKey) != update.version else { return }
 
-            UserDefaults.standard.set(version, forKey: self.notifiedVersionKey)
-            UserNotifier.notify(title: "FinderWand 有新版本 v\(version)",
-                                body: "点击下载安装包，也可在菜单栏「检查更新」查看更新说明。",
-                                openURL: downloadURL ?? pageURL)
+            UserDefaults.standard.set(update.version, forKey: self.notifiedVersionKey)
+            UserNotifier.notify(title: "FinderWand 有新版本 v\(update.version)",
+                                body: "点击查看更新说明，可一键安装。",
+                                action: Self.showUpdateAction)
         }
     }
 
@@ -96,27 +110,38 @@ final class UpdateChecker {
             return .upToDate
         }
 
-        let notes = (json["body"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var notes = (json["body"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        #if DEBUG
+        // 调试：`defaults write <开发版 BundleID> FWDebugReleaseNotes -string "<Markdown>"` 覆盖更新说明，便于看排版
+        if let debugNotes = UserDefaults.standard.string(forKey: "FWDebugReleaseNotes") { notes = debugNotes }
+        #endif
         let pageURL = (json["html_url"] as? String).flatMap { URL(string: $0) } ?? AppInfo.repositoryURL
-        let downloadURL = dmgAssetURL(from: json)
+        let assets = assetURLs(from: json)
+        let dmgName = assets.keys.first { $0.hasSuffix(".dmg") }
 
-        return .updateAvailable(version: latestVersion, notes: notes, downloadURL: downloadURL, pageURL: pageURL)
+        return .updateAvailable(UpdateInfo(version: latestVersion,
+                                           notes: notes,
+                                           downloadURL: dmgName.flatMap { assets[$0] },
+                                           checksumURL: dmgName.flatMap { assets[$0 + ".sha256"] },
+                                           pageURL: pageURL))
     }
 
-    /// 从 assets 中取 .dmg 的下载地址
-    private static func dmgAssetURL(from json: [String: Any]) -> URL? {
-        guard let assets = json["assets"] as? [[String: Any]] else { return nil }
+    /// 通知点击动作：弹出检查更新窗口（由菜单栏控制器注册处理）
+    static let showUpdateAction = "showUpdate"
 
+    /// assets 的「文件名 → 下载地址」
+    private static func assetURLs(from json: [String: Any]) -> [String: URL] {
+        let assets = json["assets"] as? [[String: Any]] ?? []
+        var result: [String: URL] = [:]
         for asset in assets {
             if let name = asset["name"] as? String,
-               name.hasSuffix(".dmg"),
                let urlString = asset["browser_download_url"] as? String,
                let url = URL(string: urlString) {
-                return url
+                result[name] = url
             }
         }
 
-        return nil
+        return result
     }
 
     /// 归一化版本号：去掉前导 v 与 -beta 等后缀，保留 x.y.z

@@ -1,0 +1,13 @@
+如果打开 FinderWand 时提示「未打开 "FinderWand.app"」或「Apple 无法验证…」
+
+原因：FinderWand 没有经过 Apple 公证，从浏览器下载的安装包会被系统加上隔离标记，打开时被拦截。
+
+解决：
+1. 先把 FinderWand.app 拖到「应用程序」文件夹。
+2. 打开「终端」（在「应用程序 > 实用工具」里），粘贴下面这行命令并回车：
+
+xattr -dr com.apple.quarantine /Applications/FinderWand.app
+
+3. 再打开 FinderWand 即可。
+
+以后升级不用再这样做：在菜单栏 FinderWand 图标里点「检查更新」，有新版本时点「下载并安装」，App 会自动替换并重启，不会再被拦截。

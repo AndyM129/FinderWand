@@ -5,35 +5,49 @@ import AppKit
 /// 以及行内的粗体、斜体、代码与链接；其余按普通文本显示。
 enum ReleaseNotesRenderer {
 
+    /// 去掉 GitHub 自动生成的「**Full Changelog**: <对比链接>」行（对用户没有信息量）
+    static func removingChangelogLink(_ markdown: String) -> String {
+        markdown
+            .components(separatedBy: "\n")
+            .filter { !$0.replacingOccurrences(of: "*", with: "").trimmingCharacters(in: .whitespaces).hasPrefix("Full Changelog:") }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func attributedString(markdown: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let bodyFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize + 1)
-        var lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
 
-        // 去掉首尾空行，连续空行合并为一个
-        while lines.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeFirst() }
-        while lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeLast() }
 
-        var previousBlank = false
+        // 空行不输出，段落间距由段落样式控制；标题前留出较大间距（第一行除外）
+        let bodyStyle = NSMutableParagraphStyle()
+        bodyStyle.lineSpacing = 2
+        bodyStyle.paragraphSpacing = 4
+        let headingStyle = NSMutableParagraphStyle()
+        headingStyle.paragraphSpacing = 4
+        headingStyle.paragraphSpacingBefore = 10
+
         for rawLine in lines {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty {
-                if !previousBlank { result.append(NSAttributedString(string: "\n")) }
-                previousBlank = true
-                continue
-            }
-            previousBlank = false
+            if line.isEmpty { continue }
 
             var text = line
             var font = bodyFont
             var prefix = ""
+            var style = bodyStyle
 
             if let level = headingLevel(of: line) {
+                style = result.length == 0 ? bodyStyle : headingStyle
                 text = String(line.dropFirst(level)).trimmingCharacters(in: .whitespaces)
                 font = NSFont.boldSystemFont(ofSize: bodyFont.pointSize + (level <= 2 ? 2 : 0))
             } else if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
                 text = String(line.dropFirst(2))
                 prefix = "• "
+                // 列表项换行后与圆点后的文字对齐
+                let listStyle = bodyStyle.mutableCopy() as! NSMutableParagraphStyle
+                listStyle.headIndent = 12
+                style = listStyle
             } else if line.hasPrefix(">") {
                 text = String(line.dropFirst()).trimmingCharacters(in: .whitespaces)
                 prefix = "┃ "
@@ -44,6 +58,7 @@ enum ReleaseNotesRenderer {
                                                        attributes: [.font: font])
             lineString.append(inline(text, font: font))
             lineString.append(NSAttributedString(string: "\n", attributes: [.font: font]))
+            lineString.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: lineString.length))
             result.append(lineString)
         }
 
@@ -92,29 +107,5 @@ enum ReleaseNotesRenderer {
         }
 
         return output
-    }
-}
-
-/// 检查更新弹窗里显示更新说明的可滚动文本区
-enum ReleaseNotesView {
-
-    static func make(markdown: String) -> NSView {
-        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 380, height: 220))
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .bezelBorder
-
-        let textView = NSTextView(frame: scrollView.contentView.bounds)
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 6, height: 6)
-        textView.autoresizingMask = [.width]
-        textView.isVerticallyResizable = true
-        textView.textContainer?.widthTracksTextView = true
-        textView.textStorage?.setAttributedString(ReleaseNotesRenderer.attributedString(markdown: markdown))
-
-        scrollView.documentView = textView
-        return scrollView
     }
 }

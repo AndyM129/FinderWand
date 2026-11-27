@@ -18,6 +18,14 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// 上一条通知的投递时间
     private var lastDeliveredAt = Date.distantPast
 
+    /// 通知点击动作的处理器（动作名 → 处理闭包，主线程调用）
+    private var actionHandlers: [String: () -> Void] = [:]
+
+    /// 注册通知点击动作，配合 `notify(..., action:)` 使用
+    func register(action: String, handler: @escaping () -> Void) {
+        actionHandlers[action] = handler
+    }
+
     /// 两条通知之间的最小间隔（秒），避免被系统节流折叠
     private let minInterval: TimeInterval = 0.8
 
@@ -30,12 +38,14 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// 发送一条系统通知（未授权时系统会静默忽略）
     /// 若与上一条间隔过近，会自动延迟到满足最小间隔后再投递。
-    /// - Parameter openURL: 点击通知时打开的地址，可为空
-    static func notify(title: String, body: String, openURL: URL? = nil) {
-        shared.enqueue(title: title, body: body, openURL: openURL)
+    /// - Parameters:
+    ///   - openURL: 点击通知时打开的地址，可为空
+    ///   - action: 点击通知时执行的动作名（见 `register(action:handler:)`），优先于 openURL
+    static func notify(title: String, body: String, openURL: URL? = nil, action: String? = nil) {
+        shared.enqueue(title: title, body: body, openURL: openURL, action: action)
     }
 
-    private func enqueue(title: String, body: String, openURL: URL?) {
+    private func enqueue(title: String, body: String, openURL: URL?, action: String?) {
         queue.async { [weak self] in
             guard let self = self else { return }
 
@@ -48,9 +58,10 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            if let openURL = openURL {
-                content.userInfo = [Self.openURLKey: openURL.absoluteString]
-            }
+            var userInfo: [String: String] = [:]
+            if let openURL = openURL { userInfo[Self.openURLKey] = openURL.absoluteString }
+            if let action = action { userInfo[Self.actionKey] = action }
+            content.userInfo = userInfo
 
             let request = UNNotificationRequest(identifier: UUID().uuidString,
                                                 content: content,
@@ -70,8 +81,10 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        if let string = response.notification.request.content.userInfo[Self.openURLKey] as? String,
-           let url = URL(string: string) {
+        let userInfo = response.notification.request.content.userInfo
+        if let action = userInfo[Self.actionKey] as? String {
+            DispatchQueue.main.async { self.actionHandlers[action]?() }
+        } else if let string = userInfo[Self.openURLKey] as? String, let url = URL(string: string) {
             NSWorkspace.shared.open(url)
         }
         completionHandler()
@@ -79,4 +92,7 @@ final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// 通知 userInfo 中「点击后打开的地址」的键
     private static let openURLKey = "openURL"
+
+    /// 通知 userInfo 中「点击后执行的动作名」的键
+    private static let actionKey = "action"
 }

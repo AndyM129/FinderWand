@@ -70,12 +70,19 @@ jobs:
           LABEL: ${{ steps.meta.outputs.tag }}
         run: ./scripts/package-dmg.sh
 
+      # 更新说明取自 CHANGELOG.md 对应版本一节，App 内「软件更新」窗口会显示它
+      - name: Release notes
+        run: |
+          ./scripts/release-notes.sh "${{ steps.meta.outputs.version }}" > .build/release-notes.md
+          echo "---- release notes ----"; cat .build/release-notes.md
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.tag }}
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          body_path: .build/release-notes.md
           generate_release_notes: true
           files: |
             .build/dist/FinderWand-${{ steps.meta.outputs.tag }}.dmg

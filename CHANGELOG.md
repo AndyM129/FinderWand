@@ -8,7 +8,14 @@
 
 ## 1.1、新增
 
-- 暂无。
+- 一键更新：「软件更新」窗口点「下载并安装」后，App 自己下载新版 dmg，按 Release 附带的 `.sha256` 校验，核对 BundleID、版本与签名，替换 `/Applications/FinderWand.app` 并重新打开。App 自己下载的文件不带隔离属性，升级后打开不会再提示「已阻止打开」。替换过程写入 `~/Library/Logs/FinderWand/update.log`，失败时恢复旧版本。
+- dmg 里新增「如果提示已阻止打开.txt」：首次从浏览器下载安装被拦截时，按说明在终端执行 `xattr -dr com.apple.quarantine /Applications/FinderWand.app`。
+
+## 1.2、变更
+
+- 检查更新改用独立的「软件更新」窗口（左侧图标，右侧版本对比与更新说明，底部按钮和下载进度），替代原来居中竖排的弹窗；更新说明按内容高度显示，去掉 GitHub 自动附加的「Full Changelog」行。
+- 「有新版本」通知点击后打开「软件更新」窗口，不再直接下载 dmg。
+- Release 正文改为取 `CHANGELOG.md` 中对应版本一节（`scripts/release-notes.sh`），App 内能看到具体更新内容。
 
 # 2、历史版本
 

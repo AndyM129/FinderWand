@@ -16,10 +16,8 @@ final class ReleaseNotesRendererTests: XCTestCase {
 
         XCTAssertEqual(text.string, """
         新增
-
         • 支持 iTerm，见 terminal=iterm
         • 发布页
-
         Full Changelog: https://github.com/AndyM129/FinderWand/compare/v1.2.1...v1.3.0
 
         """)
@@ -31,6 +29,12 @@ final class ReleaseNotesRendererTests: XCTestCase {
         let boldRange = (text.string as NSString).range(of: "iTerm")
         let font = text.attribute(.font, at: boldRange.location, effectiveRange: nil) as? NSFont
         XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) == true)
+    }
+
+    func testRemovesGitHubChangelogLink() {
+        let notes = "### 新增\n\n- A\n\n**Full Changelog**: https://github.com/x/y/compare/v1...v2"
+        XCTAssertEqual(ReleaseNotesRenderer.removingChangelogLink(notes), "### 新增\n\n- A")
+        XCTAssertEqual(ReleaseNotesRenderer.removingChangelogLink("**Full Changelog**: https://x"), "")
     }
 
     func testPlainTextUnchanged() {

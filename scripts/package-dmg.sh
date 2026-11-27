@@ -97,12 +97,14 @@ else
   LABEL="v${SHORT_VER}"
 fi
 
-# 组装 dmg 内容：App + 指向 /Applications 的软链
+# 组装 dmg 内容：App + 指向 /Applications 的软链 + 「已阻止打开」的修复说明
 STAGING="$DIST/staging"
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
 cp -R "$APP" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
+GUIDE_NAME="如果提示已阻止打开.txt"
+cp "$ROOT/Resources/$GUIDE_NAME" "$STAGING/$GUIDE_NAME"
 
 # 卷图标：复用 App 编译产出的 AppIcon.icns，保证 dmg 图标与 App 图标一致
 VOL_ICON_SRC="$APP/Contents/Resources/AppIcon.icns"
@@ -185,6 +187,8 @@ if [[ "$HAS_BG" == "1" ]]; then
   APP_Y=$(( BG_H * 10 / 100 ))
   ALIAS_X=$(( BG_W * 40 / 100 ))
   ALIAS_Y=$(( BG_H * 10 / 100 ))
+  GUIDE_X=$APP_X
+  GUIDE_Y=$(( BG_H * 60 / 100 ))
   WIN_R=$(( 100 + BG_W ))
   WIN_B=$(( 100 + BG_H ))
 
@@ -202,6 +206,13 @@ tell application "Finder"
     set background picture of theViewOptions to file "$BG_FINDER_REF"
     set position of item "$APP_NAME.app" of container window to {$APP_X, $APP_Y}
     set position of item "Applications" of container window to {$ALIAS_X, $ALIAS_Y}
+    set position of item "$GUIDE_NAME" of container window to {$GUIDE_X, $GUIDE_Y}
+    -- 显示隐藏文件时，把背景图等隐藏项挪到窗口外，避免挡住说明文件
+    repeat with hiddenName in {".background", ".VolumeIcon.icns", ".fseventsd"}
+      try
+        set position of item hiddenName of container window to {$(( BG_W + 200 )), $(( BG_H + 200 ))}
+      end try
+    end repeat
     update without registering applications
     delay 1
     close

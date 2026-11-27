@@ -11,6 +11,9 @@ final class MenuBarController: NSObject {
     /// 插件详情窗口控制器（打开时强引用持有，关闭后释放）
     private var detailWindowController: PluginDetailWindowController?
 
+    /// 软件更新窗口控制器（打开时强引用持有，关闭后释放）
+    private var updateWindowController: UpdateWindowController?
+
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
@@ -21,6 +24,11 @@ final class MenuBarController: NSObject {
         menu.delegate = self
         statusItem.menu = menu
         populateMenu(menu)
+
+        // 点击「有新版本」通知：重新检查并弹出更新窗口
+        UserNotifier.shared.register(action: UpdateChecker.showUpdateAction) { [weak self] in
+            self?.checkForUpdates()
+        }
     }
 
     /// 配置菜单栏按钮图标
@@ -523,7 +531,7 @@ final class MenuBarController: NSObject {
     }
 
     /// 检查更新：查询 GitHub 最新正式版并提示
-    @objc private func checkForUpdates() {
+    @objc func checkForUpdates() {
         UpdateChecker.shared.check { [weak self] result in
             self?.presentUpdateResult(result)
         }
@@ -532,6 +540,11 @@ final class MenuBarController: NSObject {
     /// 展示检查更新结果
     private func presentUpdateResult(_ result: UpdateCheckResult) {
         NSApp.activate(ignoringOtherApps: true)
+
+        if case let .updateAvailable(update) = result {
+            showUpdateWindow(update)
+            return
+        }
 
         let alert = NSAlert()
         switch result {
@@ -547,25 +560,22 @@ final class MenuBarController: NSObject {
             alert.addButton(withTitle: "好")
             alert.runModal()
 
-        case let .updateAvailable(version, notes, downloadURL, pageURL):
-            alert.messageText = "发现新版本 v\(version)"
-            if notes.isEmpty {
-                alert.informativeText = "有可用更新。"
-            } else {
-                alert.informativeText = "更新说明："
-                alert.accessoryView = ReleaseNotesView.make(markdown: notes)
-            }
-            alert.addButton(withTitle: downloadURL != nil ? "下载安装包" : "打开发布页")
-            alert.addButton(withTitle: "查看发布页")
-            alert.addButton(withTitle: "取消")
-            switch alert.runModal() {
-            case .alertFirstButtonReturn:
-                NSWorkspace.shared.open(downloadURL ?? pageURL)
-            case .alertSecondButtonReturn:
-                NSWorkspace.shared.open(pageURL)
-            default:
-                break
-            }
+        case let .updateAvailable(update):
+            showUpdateWindow(update)
+        }
+    }
+
+    /// 弹出「软件更新」窗口；已打开时置前
+    private func showUpdateWindow(_ update: UpdateInfo) {
+        if let window = updateWindowController {
+            window.bringToFront()
+            return
+        }
+
+        let controller = UpdateWindowController(update: update)
+        updateWindowController = controller
+        controller.show { [weak self] in
+            self?.updateWindowController = nil
         }
     }
 

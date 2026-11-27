@@ -162,7 +162,9 @@ echo "Git 助手 | sfimage=arrow.triangle.branch"
 - 「已安装插件」子菜单：枚举插件文件夹并展示每个插件的标题、id、版本、作者、标签、状态、简介；提供「查看详情」（弹出详情窗口：图标、标题、版本、作者、标签、简介、`previewUrl` 预览图，及作者主页/说明/定位入口）、「启用/停用」（改写 `main.sh` 头部 `enabled`）、「查看说明」（存在 `README.md` 时打开）、「在 Finder 中显示」、「导出为 zip…」（`NSSavePanel` 选位置，`ditto -c -k --keepParent` 打包该插件文件夹，用于分享）、「卸载插件…」（确认后 `FileManager.trashItem` 移到废纸篓，可恢复）。菜单项图标取 `iconUrl`（文件夹内相对图或网络图，网络图磁盘缓存、后台下载），缩放 16pt 并加圆角（约 22.37% 边长，参考 Apple 图标规范）。
 - 「新建插件」：优先从插件市场拉取最新 `TemplatePlugin`（`fetchFromMarket`），失败则回退到 App 内置模板（`Resources/TemplatePlugin`，以文件夹引用打入 App 资源）；放入插件目录时同名加时间戳后缀，随后通知并打开该文件夹。
 - 菜单栏菜单采用持久 `NSMenu` + `NSMenuDelegate.menuNeedsUpdate`，每次打开前重新枚举，保证启用态等动态信息实时。右键菜单每次右键都实时构建，因此不提供「刷新」菜单项（2026-11-27 移除）。
-- 检查更新：除菜单栏手动「检查更新」外，启动 30s 后及之后每 24 小时静默检查一次；发现新版本时发系统通知（点击打开 dmg 下载地址），同一版本只通知一次；已是最新或失败时不打扰。本地开发构建（channel 为 dev）不自动检查。
+- 检查更新：除菜单栏手动「检查更新」外，启动 30s 后及之后每 24 小时静默检查一次；发现新版本时发系统通知（点击打开「软件更新」窗口），同一版本只通知一次；已是最新或失败时不打扰。本地开发构建（channel 为 dev）不自动检查。
+- 一键更新（`UpdateInstaller`）：URLSession 下载 dmg（不带 `com.apple.quarantine`，因此新版本打开不被 Gatekeeper 拦截）→ 按 Release 资产 `<dmg>.sha256` 校验 → `hdiutil attach` 只读挂载 → 核对 BundleID、`CFBundleShortVersionString`、`codesign --verify --deep --strict` → `ditto` 到目标同目录的 `.FinderWand-update-<版本>.app` → 主 App 退出，辅助 zsh 脚本等进程退出后把旧 App 改名备份、新 App 改名就位、`open` 重新打开，失败时恢复旧 App；日志 `~/Library/Logs/FinderWand/update.log`。运行在 App Translocation 路径、所在目录不可写、本地开发构建时不提供一键更新。
+- Release 正文由 CI 用 `scripts/release-notes.sh <版本>` 从 `CHANGELOG.md` 截取对应版本一节。
 - 切换启用态、新建插件等操作以系统通知反馈（`UNUserNotificationCenter`，前台通过 willPresent 强制横幅展示）。
 
 ## 3.13、待定与后续
